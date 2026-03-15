@@ -4296,3 +4296,231 @@ final class RuntimeRecoveryWiringTests: XCTestCase {
         XCTAssertEqual(classification.failureClass, .buildFailed)
     }
 }
+
+// MARK: - 52. Recipes Layer Tests
+
+final class RecipeTypesTests: XCTestCase {
+
+    func testRecipeInit() {
+        let step = RecipeStep(id: 1, action: "noop")
+        let recipe = Recipe(name: "test", description: "A test recipe", steps: [step])
+        XCTAssertEqual(recipe.name, "test")
+        XCTAssertEqual(recipe.steps.count, 1)
+        XCTAssertEqual(recipe.schemaVersion, 2)
+    }
+
+    func testRecipeStepInit() {
+        let step = RecipeStep(id: 1, action: "click", targetName: "Login", params: ["timeout": "5"], note: "click login")
+        XCTAssertEqual(step.id, 1)
+        XCTAssertEqual(step.action, "click")
+        XCTAssertEqual(step.targetName, "Login")
+        XCTAssertEqual(step.params?["timeout"], "5")
+        XCTAssertEqual(step.note, "click login")
+    }
+
+    func testRecipeParamInit() {
+        let param = RecipeParam(type: "string", description: "Search query", required: true)
+        XCTAssertEqual(param.type, "string")
+        XCTAssertTrue(param.required ?? false)
+    }
+
+    func testRecipePreconditionsInit() {
+        let pre = RecipePreconditions(appRunning: "Safari", urlContains: "example.com")
+        XCTAssertEqual(pre.appRunning, "Safari")
+        XCTAssertEqual(pre.urlContains, "example.com")
+    }
+
+    func testRecipeWaitConditionInit() {
+        let wait = RecipeWaitCondition(condition: "elementExists", value: "Submit", timeout: 10.0)
+        XCTAssertEqual(wait.condition, "elementExists")
+        XCTAssertEqual(wait.value, "Submit")
+        XCTAssertEqual(wait.timeout, 10.0)
+    }
+
+    func testRecipeRunResultInit() {
+        let result = RecipeRunResult(recipeName: "test", success: true, stepsCompleted: 3, totalSteps: 3, stepResults: [])
+        XCTAssertTrue(result.success)
+        XCTAssertEqual(result.stepsCompleted, 3)
+        XCTAssertNil(result.error)
+    }
+
+    func testRecipeStepResultInit() {
+        let sr = RecipeStepResult(stepId: 1, action: "noop", success: true, durationMs: 5)
+        XCTAssertTrue(sr.success)
+        XCTAssertEqual(sr.stepId, 1)
+    }
+
+    func testRecipeCodableRoundTrip() throws {
+        let step = RecipeStep(id: 1, action: "noop", note: "test step")
+        let recipe = Recipe(name: "roundtrip", description: "test", steps: [step])
+        let data = try JSONEncoder().encode(recipe)
+        let decoded = try JSONDecoder().decode(Recipe.self, from: data)
+        XCTAssertEqual(decoded.name, "roundtrip")
+        XCTAssertEqual(decoded.steps.first?.action, "noop")
+    }
+}
+
+final class RecipeStoreTests: XCTestCase {
+
+    func testAddAndRetrieve() {
+        let store = RecipeStore()
+        let recipe = Recipe(name: "find_file", description: "Find a file", steps: [])
+        store.add(recipe)
+        XCTAssertNotNil(store.recipe(named: "find_file"))
+        XCTAssertEqual(store.count, 1)
+    }
+
+    func testRemoveRecipe() {
+        let store = RecipeStore()
+        let recipe = Recipe(name: "my_recipe", description: "desc", steps: [])
+        store.add(recipe)
+        let removed = store.remove(named: "my_recipe")
+        XCTAssertTrue(removed)
+        XCTAssertNil(store.recipe(named: "my_recipe"))
+    }
+
+    func testRemoveMissingReturnsFalse() {
+        let store = RecipeStore()
+        XCTAssertFalse(store.remove(named: "ghost"))
+    }
+
+    func testAllRecipesSortedAlphabetically() {
+        let store = RecipeStore()
+        store.add(Recipe(name: "zzz", description: "last", steps: []))
+        store.add(Recipe(name: "aaa", description: "first", steps: []))
+        let all = store.allRecipes()
+        XCTAssertEqual(all.first?.name, "aaa")
+        XCTAssertEqual(all.last?.name, "zzz")
+    }
+
+    func testImportValidJSON() throws {
+        let store = RecipeStore()
+        let json = """
+        {
+          "schema_version": 2,
+          "name": "json_recipe",
+          "description": "Imported from JSON",
+          "steps": [{"id": 1, "action": "noop"}]
+        }
+        """
+        let name = try store.importJSON(json)
+        XCTAssertEqual(name, "json_recipe")
+        XCTAssertNotNil(store.recipe(named: "json_recipe"))
+    }
+
+    func testImportInvalidJSONThrows() {
+        let store = RecipeStore()
+        XCTAssertThrowsError(try store.importJSON("{ invalid json }"))
+    }
+}
+
+final class RecipeEngineTests: XCTestCase {
+
+    override func setUp() {
+        super.setUp()
+        ActionRegistry.shared.registerDefaults()
+    }
+
+    func testRunSuccessfulRecipe() {
+        let steps = [
+            RecipeStep(id: 1, action: "noop", note: "step 1"),
+            RecipeStep(id: 2, action: "noop", note: "step 2"),
+        ]
+        let recipe = Recipe(name: "success_recipe", description: "Always succeeds", steps: steps)
+        let result = RecipeEngine.run(recipe: recipe)
+        XCTAssertTrue(result.success)
+        XCTAssertEqual(result.stepsCompleted, 2)
+        XCTAssertEqual(result.totalSteps, 2)
+        XCTAssertNil(result.error)
+    }
+
+    func testRunFailsOnMissingRequiredParam() {
+        let params: [String: RecipeParam] = [
+            "query": RecipeParam(type: "string", description: "search query", required: true)
+        ]
+        let recipe = Recipe(name: "param_test", description: "Requires query", params: params, steps: [])
+        let result = RecipeEngine.run(recipe: recipe, params: [:])
+        XCTAssertFalse(result.success)
+        XCTAssertNotNil(result.error)
+        XCTAssertTrue(result.error?.contains("query") ?? false)
+    }
+
+    func testRunSucceedsWithRequiredParam() {
+        let params: [String: RecipeParam] = [
+            "query": RecipeParam(type: "string", description: "search query", required: true)
+        ]
+        let steps = [RecipeStep(id: 1, action: "noop")]
+        let recipe = Recipe(name: "param_ok", description: "test", params: params, steps: steps)
+        let result = RecipeEngine.run(recipe: recipe, params: ["query": "swift closures"])
+        XCTAssertTrue(result.success)
+    }
+
+    func testRunStopsOnUnknownActionByDefault() {
+        let steps = [
+            RecipeStep(id: 1, action: "noop"),
+            RecipeStep(id: 2, action: "unregistered_action_xyz"),
+            RecipeStep(id: 3, action: "noop"),
+        ]
+        let recipe = Recipe(name: "stop_test", description: "Should stop at step 2", steps: steps)
+        let result = RecipeEngine.run(recipe: recipe)
+        // unregistered action → handler returns failure → stop (default policy)
+        XCTAssertFalse(result.success)
+        XCTAssertEqual(result.stepsCompleted, 1)  // step 1 succeeded before stop
+    }
+
+    func testRunSkipsFailedStepWithSkipPolicy() {
+        let steps = [
+            RecipeStep(id: 1, action: "noop"),
+            RecipeStep(id: 2, action: "unregistered_action_xyz", onFailure: "skip"),
+            RecipeStep(id: 3, action: "noop"),
+        ]
+        let recipe = Recipe(name: "skip_test", description: "Should skip step 2", steps: steps)
+        let result = RecipeEngine.run(recipe: recipe)
+        XCTAssertTrue(result.success)
+        XCTAssertEqual(result.stepsCompleted, 2)  // steps 1 and 3 succeeded
+    }
+
+    func testParamSubstitution() {
+        let steps = [
+            RecipeStep(id: 1, action: "noop", params: ["text": "hello {{name}}"])
+        ]
+        let recipe = Recipe(name: "subst_test", description: "test", steps: steps)
+        // We can't directly test the substitution output without a custom action,
+        // but we verify the recipe runs without error when params are supplied.
+        let result = RecipeEngine.run(recipe: recipe, params: ["name": "world"])
+        XCTAssertTrue(result.success)
+    }
+
+    func testStepResultsArePopulated() {
+        let steps = [
+            RecipeStep(id: 1, action: "noop", note: "first"),
+            RecipeStep(id: 2, action: "noop", note: "second"),
+        ]
+        let recipe = Recipe(name: "results_test", description: "test", steps: steps)
+        let result = RecipeEngine.run(recipe: recipe)
+        XCTAssertEqual(result.stepResults.count, 2)
+        XCTAssertEqual(result.stepResults[0].stepId, 1)
+        XCTAssertTrue(result.stepResults[0].success)
+    }
+}
+
+final class RuntimeRecipeWiringTests: XCTestCase {
+
+    func testRuntimeHasRecipeStore() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.recipeStore)
+        XCTAssertEqual(runtime.recipeStore.count, 0)
+    }
+
+    func testCanAddAndRunRecipeThroughRuntime() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let step = RecipeStep(id: 1, action: "noop")
+        let recipe = Recipe(name: "runtime_recipe", description: "noop recipe", steps: [step])
+        runtime.recipeStore.add(recipe)
+        XCTAssertNotNil(runtime.recipeStore.recipe(named: "runtime_recipe"))
+        let result = RecipeEngine.run(recipe: recipe)
+        XCTAssertTrue(result.success)
+    }
+}

@@ -121,6 +121,9 @@ public final class OracleRuntime {
     /// Selects and prepares recovery strategies from the library.
     public private(set) lazy var recoveryStrategySelector: RecoveryStrategySelector = RecoveryStrategySelector(library: recoveryStrategyLibrary)
 
+    /// In-memory recipe catalogue.
+    public private(set) lazy var recipeStore: RecipeStore = RecipeStore()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -179,7 +182,10 @@ public final class OracleRuntime {
         _ = recoveryStrategyLibrary
         _ = recoveryStrategySelector
 
-        // 11. Diagnostics baseline
+        // 11. Recipe store warm-up
+        _ = recipeStore
+
+        // 12. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()
