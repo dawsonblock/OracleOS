@@ -24,10 +24,12 @@ public final class SearchController {
 
     // ── Unified search ──────────────────────────────────
 
-    public struct SearchResult {
+    public struct SearchResult: Equatable {
         public let source: String      // "code" | "graph" | "web" | "metasearch"
         public let title: String
         public let snippet: String
+        public let url: String
+        public let timestamp: Date?
         public let relevance: Double
     }
 
@@ -41,28 +43,33 @@ public final class SearchController {
                 source: "graph",
                 title: "Trace: \(t.actionType)",
                 snippet: "success=\(t.success) detail=\(t.detail)",
+                url: "graph://trace/recent",
+                timestamp: Date(),
                 relevance: 0.6
             ))
         }
 
-        // 2. Code index search — stub until sidecar wired
+        // 2. Code index search
         let codeResults = codeQuery.searchPattern(pattern: query)
         if !codeResults.isEmpty {
             results.append(SearchResult(
                 source: "code",
-                title: "Symbol match",
+                title: "Symbol match for '\(query)'",
                 snippet: codeResults.joined(separator: ", "),
+                url: "code://pattern/\(query.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? "")",
+                timestamp: Date(),
                 relevance: 0.8
             ))
         }
 
-        // 3. Web extraction — stub
-        let webResult = webExtractor.extract(url: "https://search.example.com/q=\(query)")
-        if !webResult.isEmpty {
+        // 3. Web extraction
+        if let webResult = webExtractor.extract(url: "https://search.example.com/q=\(query)") {
             results.append(SearchResult(
                 source: "web",
-                title: "Web: \(query)",
-                snippet: webResult,
+                title: webResult.title,
+                snippet: String(webResult.markdownBody.prefix(300)),
+                url: webResult.url,
+                timestamp: webResult.timestamp,
                 relevance: 0.5
             ))
         }
