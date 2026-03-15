@@ -13,56 +13,38 @@ import Foundation
 
 public final class RepairPipeline {
 
-    public init() {}
+    private let targetSelector: PatchTargetSelector
+    private let patchGenerator: PatchGenerator
+
+    public init(
+        targetSelector: PatchTargetSelector = PatchTargetSelector(),
+        patchGenerator: PatchGenerator = PatchGenerator()
+    ) {
+        self.targetSelector = targetSelector
+        self.patchGenerator = patchGenerator
+    }
 
     public func repair(failure: String, workspace: String) -> RepairResult {
         // Phase 12: full repair loop
         print("[repair] Repair requested for: \(failure)")
-        return RepairResult(success: false, patches: [])
+        
+        // 1. Localization
+        let targets = targetSelector.isolateTargetComponents(from: failure)
+        
+        // 2. Generation
+        var allPatches = [PatchCandidate]()
+        for target in targets {
+            let patches = patchGenerator.generate(target: target.file, context: target.contextSnippet ?? "")
+            allPatches.append(contentsOf: patches)
+        }
+        
+        // 3. Application & Validation
+        // (Wired sequentially via Sandbox/GraphStore in runtime)
+        return RepairResult(success: !allPatches.isEmpty, patches: allPatches)
     }
 
     public struct RepairResult {
         public let success: Bool
         public let patches: [PatchCandidate]
-    }
-}
-
-public struct PatchCandidate {
-
-    public let id: String
-    public let targetFile: String
-    public let diff: String
-    public let score: Double
-
-    public init(
-        targetFile: String,
-        diff: String,
-        score: Double,
-        id: String = UUID().uuidString
-    ) {
-        self.id = id
-        self.targetFile = targetFile
-        self.diff = diff
-        self.score = score
-    }
-}
-
-public final class PatchTargetSelector {
-
-    public init() {}
-
-    public func select(failure: String, symbolGraph: SymbolGraph) -> [String] {
-        // Phase 12: select files based on stack trace, symbol graph, test location
-        return []
-    }
-}
-
-public final class PatchGenerator {
-
-    public init() {}
-
-    public func generate(target: String, context: String) -> [PatchCandidate] {
-        // Phase 12: LLM-driven patch generation
-        return []
     }
 }
