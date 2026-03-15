@@ -3373,3 +3373,655 @@ final class AgentLoopTests: XCTestCase {
         XCTAssertTrue(validReasons.contains(outcome.reason))
     }
 }
+
+// MARK: - 49. Strategy Layer Tests
+
+// ── 49a. StrategyKind ────────────────────────────────────────────────────────
+
+final class StrategyKindTests: XCTestCase {
+
+    func testAllCasesHaveRawValues() {
+        for kind in StrategyKind.allCases {
+            XCTAssertFalse(kind.rawValue.isEmpty)
+        }
+    }
+
+    func testExpectedCases() {
+        XCTAssertNotNil(StrategyKind(rawValue: "repo_repair"))
+        XCTAssertNotNil(StrategyKind(rawValue: "recovery_mode"))
+        XCTAssertNotNil(StrategyKind(rawValue: "browser_interaction"))
+        XCTAssertNotNil(StrategyKind(rawValue: "graph_navigation"))
+        XCTAssertNil(StrategyKind(rawValue: "nonexistent"))
+    }
+
+    func testCaseIterableCount() {
+        XCTAssertEqual(StrategyKind.allCases.count, 9)
+    }
+}
+
+// ── 49b. OperatorFamily ──────────────────────────────────────────────────────
+
+final class OperatorFamilyTests: XCTestCase {
+
+    func testAllCasesHaveRawValues() {
+        for family in OperatorFamily.allCases {
+            XCTAssertFalse(family.rawValue.isEmpty)
+        }
+    }
+
+    func testExpectedCases() {
+        XCTAssertNotNil(OperatorFamily(rawValue: "recovery"))
+        XCTAssertNotNil(OperatorFamily(rawValue: "graph_edge"))
+        XCTAssertNotNil(OperatorFamily(rawValue: "patch_generation"))
+        XCTAssertNil(OperatorFamily(rawValue: "nonexistent"))
+    }
+}
+
+// ── 49c. SelectedStrategy ────────────────────────────────────────────────────
+
+final class SelectedStrategyTests: XCTestCase {
+
+    private func makeStrategy(
+        kind: StrategyKind = .repoRepair,
+        families: [OperatorFamily] = [.repoAnalysis, .patchGeneration, .recovery]
+    ) -> SelectedStrategy {
+        SelectedStrategy(
+            kind: kind,
+            confidence: 0.85,
+            rationale: "test",
+            allowedOperatorFamilies: families,
+            reevaluateAfterStepCount: 5
+        )
+    }
+
+    func testAllows() {
+        let s = makeStrategy()
+        XCTAssertTrue(s.allows(.repoAnalysis))
+        XCTAssertTrue(s.allows(.recovery))
+        XCTAssertFalse(s.allows(.browserTargeted))
+    }
+
+    func testIsHighConfidence() {
+        let hi = makeStrategy()
+        XCTAssertTrue(hi.isHighConfidence)
+        let lo = SelectedStrategy(kind: .graphNavigation, confidence: 0.5, rationale: "lo",
+                                  allowedOperatorFamilies: [.graphEdge])
+        XCTAssertFalse(lo.isHighConfidence)
+    }
+
+    func testEquatable() {
+        let a = makeStrategy()
+        let b = makeStrategy()
+        XCTAssertEqual(a, b)
+    }
+}
+
+// ── 49d. StrategyLibrary ─────────────────────────────────────────────────────
+
+final class StrategyLibraryTests: XCTestCase {
+
+    func testAllowedFamiliesForRepoRepair() {
+        let families = StrategyLibrary.allowedFamilies(for: .repoRepair)
+        XCTAssertTrue(families.contains(.repoAnalysis))
+        XCTAssertTrue(families.contains(.patchGeneration))
+        XCTAssertTrue(families.contains(.recovery))
+        XCTAssertFalse(families.contains(.browserTargeted))
+    }
+
+    func testAllowedFamiliesForRecovery() {
+        let families = StrategyLibrary.allowedFamilies(for: .recoveryMode)
+        XCTAssertTrue(families.contains(.recovery))
+        XCTAssertFalse(families.contains(.patchGeneration))
+    }
+
+    func testAllowedFamiliesForBrowser() {
+        let families = StrategyLibrary.allowedFamilies(for: .browserInteraction)
+        XCTAssertTrue(families.contains(.browserTargeted))
+        XCTAssertFalse(families.contains(.repoAnalysis))
+    }
+
+    func testAllStrategyKindsHaveFamilies() {
+        for kind in StrategyKind.allCases {
+            XCTAssertFalse(StrategyLibrary.allowedFamilies(for: kind).isEmpty,
+                           "\(kind) has no allowed families")
+        }
+    }
+
+    func testDefaultLibraryIsNonEmpty() {
+        XCTAssertGreaterThan(StrategyLibrary.defaultLibrary().count, 0)
+    }
+
+    func testDefaultLibraryContainsRecovery() {
+        let kinds = StrategyLibrary.defaultLibrary().map { $0.kind }
+        XCTAssertTrue(kinds.contains(.recovery))
+    }
+}
+
+// ── 49e. StrategyEvaluator ───────────────────────────────────────────────────
+
+final class StrategyEvaluatorTests: XCTestCase {
+
+    func testNoActiveStrategyTrigger() {
+        let ev = StrategyEvaluator()
+        XCTAssertEqual(ev.shouldReevaluate(), .noActiveStrategy)
+    }
+
+    func testPlanCompletedTrigger() {
+        let ev = StrategyEvaluator()
+        let s = SelectedStrategy(kind: .repoRepair, confidence: 0.8, rationale: "",
+                                 allowedOperatorFamilies: [.repoAnalysis], reevaluateAfterStepCount: 5)
+        ev.setCurrentStrategy(s)
+        XCTAssertEqual(ev.shouldReevaluate(planCompleted: true), .planCompleted)
+    }
+
+    func testHardFailureTrigger() {
+        let ev = StrategyEvaluator()
+        let s = SelectedStrategy(kind: .repoRepair, confidence: 0.8, rationale: "",
+                                 allowedOperatorFamilies: [.repoAnalysis], reevaluateAfterStepCount: 5)
+        ev.setCurrentStrategy(s)
+        XCTAssertEqual(ev.shouldReevaluate(hardFailure: true), .hardFailure)
+    }
+
+    func testThresholdTrigger() {
+        let ev = StrategyEvaluator()
+        let s = SelectedStrategy(kind: .graphNavigation, confidence: 0.7, rationale: "",
+                                 allowedOperatorFamilies: [.graphEdge], reevaluateAfterStepCount: 3)
+        ev.setCurrentStrategy(s)
+        ev.recordStep(); ev.recordStep(); ev.recordStep()
+        XCTAssertEqual(ev.shouldReevaluate(), .reevaluateThresholdReached)
+    }
+
+    func testNoReevaluateBelowThreshold() {
+        let ev = StrategyEvaluator()
+        let s = SelectedStrategy(kind: .graphNavigation, confidence: 0.7, rationale: "",
+                                 allowedOperatorFamilies: [.graphEdge], reevaluateAfterStepCount: 5)
+        ev.setCurrentStrategy(s)
+        ev.recordStep(); ev.recordStep()
+        XCTAssertNil(ev.shouldReevaluate())
+    }
+
+    func testReset() {
+        let ev = StrategyEvaluator()
+        let s = SelectedStrategy(kind: .repoRepair, confidence: 0.8, rationale: "",
+                                 allowedOperatorFamilies: [.repoAnalysis])
+        ev.setCurrentStrategy(s)
+        ev.reset()
+        XCTAssertNil(ev.activeStrategy())
+        XCTAssertEqual(ev.stepsSinceStrategySelection(), 0)
+    }
+
+    func testHistoricalSuccessRate() {
+        let ev = StrategyEvaluator()
+        ev.record(evaluation: StrategyEvaluation(kind: .repoRepair, steps: 3, succeeded: true, confidence: 0.8))
+        ev.record(evaluation: StrategyEvaluation(kind: .repoRepair, steps: 4, succeeded: false, confidence: 0.6))
+        let rate = ev.successRate(for: .repoRepair)
+        XCTAssertEqual(rate, 0.5, accuracy: 0.001)
+    }
+
+    func testSuccessRateZeroForUnknownKind() {
+        let ev = StrategyEvaluator()
+        XCTAssertEqual(ev.successRate(for: .experimentMode), 0.0)
+    }
+}
+
+// ── 49f. StrategySelector ────────────────────────────────────────────────────
+
+final class StrategySelectorTests: XCTestCase {
+
+    private let selector = StrategySelector()
+    private let snap = WorldModelSnapshot()
+
+    func testCodeGoalSelectsRepoRepair() {
+        let goal = Goal(description: "fix the build error in main.swift")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .code)
+        XCTAssertEqual(result.kind, .repoRepair)
+    }
+
+    func testUIGoalWithBrowserSelectsBrowser() {
+        let goal = Goal(description: "navigate to the login page in Safari")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .ui)
+        XCTAssertEqual(result.kind, .browserInteraction)
+    }
+
+    func testUIGoalWithoutBrowserSelectsDirect() {
+        let goal = Goal(description: "open System Preferences")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .ui)
+        XCTAssertEqual(result.kind, .directExecution)
+    }
+
+    func testMixedGoalWithRepairSelectsRepo() {
+        let goal = Goal(description: "run the tests and fix any failures")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .mixed)
+        XCTAssertEqual(result.kind, .repoRepair)
+    }
+
+    func testRecoveryOverrideAfterThreeFailures() {
+        let goal = Goal(description: "do something")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .mixed,
+                                     recentFailureCount: 3)
+        XCTAssertEqual(result.kind, .recoveryMode)
+    }
+
+    func testPermissionGoalSelectsPermissionResolution() {
+        let goal = Goal(description: "grant permission to access the camera")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .ui)
+        XCTAssertEqual(result.kind, .permissionResolution)
+    }
+
+    func testSelectedStrategyAllowedFamiliesAreCorrect() {
+        let goal = Goal(description: "fix the build")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .code)
+        XCTAssertTrue(result.allows(.repoAnalysis))
+        XCTAssertTrue(result.allows(.recovery))
+        XCTAssertFalse(result.allows(.browserTargeted))
+    }
+
+    func testConfidenceIsPositive() {
+        let goal = Goal(description: "build the project")
+        let result = selector.select(goal: goal, snapshot: snap, agentKind: .code)
+        XCTAssertGreaterThan(result.confidence, 0.0)
+        XCTAssertLessThanOrEqual(result.confidence, 1.0)
+    }
+}
+
+// ── 49g. Runtime Strategy Wiring ─────────────────────────────────────────────
+
+final class RuntimeStrategyWiringTests: XCTestCase {
+
+    func testRuntimeExposesStrategySelector() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.strategySelector)
+    }
+
+    func testRuntimeExposesStrategyEvaluator() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.strategyEvaluator)
+    }
+
+    func testStrategySelectorIntegratesWithRuntime() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let goal = Goal(description: "fix the failing tests")
+        let snap = runtime.worldModel.snapshot
+        let strategy = runtime.strategySelector.select(
+            goal: goal,
+            snapshot: snap,
+            agentKind: .code
+        )
+        XCTAssertEqual(strategy.kind, .repoRepair)
+        XCTAssertFalse(strategy.allowedOperatorFamilies.isEmpty)
+    }
+
+    func testStrategyEvaluatorPersistsState() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let goal = Goal(description: "build the project")
+        let snap = runtime.worldModel.snapshot
+        let strategy = runtime.strategySelector.select(goal: goal, snapshot: snap, agentKind: .code)
+        runtime.strategyEvaluator.setCurrentStrategy(strategy)
+        runtime.strategyEvaluator.recordStep()
+        XCTAssertEqual(runtime.strategyEvaluator.stepsSinceStrategySelection(), 1)
+        XCTAssertEqual(runtime.strategyEvaluator.activeStrategy()?.kind, .repoRepair)
+    }
+}
+
+// MARK: - 50. Workflow Layer Tests
+
+final class WorkflowTypesTests: XCTestCase {
+
+    func testWorkflowStepInit() {
+        let step = WorkflowStep(actionType: "click", skillName: "UISkill", agentKind: .ui)
+        XCTAssertFalse(step.id.isEmpty)
+        XCTAssertEqual(step.actionType, "click")
+        XCTAssertEqual(step.skillName, "UISkill")
+        XCTAssertEqual(step.agentKind, .ui)
+    }
+
+    func testWorkflowPlanInitDefaultsToCandidate() {
+        let plan = WorkflowPlan(agentKind: .ui, goalPattern: "open settings", steps: [])
+        XCTAssertEqual(plan.promotionStatus, .candidate)
+        XCTAssertEqual(plan.successCount, 0)
+        XCTAssertEqual(plan.attemptCount, 0)
+    }
+
+    func testWorkflowPlanSuccessRate_zeroDenominator() {
+        let plan = WorkflowPlan(agentKind: .ui, goalPattern: "open settings", steps: [])
+        XCTAssertEqual(plan.successRate, 0.0)
+    }
+
+    func testWorkflowPlanRecordSuccess() {
+        var plan = WorkflowPlan(agentKind: .code, goalPattern: "run tests", steps: [])
+        plan.recordSuccess()
+        XCTAssertEqual(plan.successCount, 1)
+        XCTAssertEqual(plan.attemptCount, 1)
+        XCTAssertEqual(plan.successRate, 1.0)
+        XCTAssertNotNil(plan.lastSucceededAt)
+    }
+
+    func testWorkflowPlanRecordFailure() {
+        var plan = WorkflowPlan(agentKind: .code, goalPattern: "run tests", steps: [])
+        plan.recordFailure()
+        XCTAssertEqual(plan.successCount, 0)
+        XCTAssertEqual(plan.attemptCount, 1)
+        XCTAssertEqual(plan.successRate, 0.0)
+    }
+
+    func testWorkflowPlanSuccessRate_partialSuccess() {
+        var plan = WorkflowPlan(agentKind: .code, goalPattern: "run tests", steps: [])
+        plan.recordSuccess()
+        plan.recordSuccess()
+        plan.recordFailure()
+        XCTAssertEqual(plan.successRate, 2.0/3.0, accuracy: 0.001)
+    }
+
+    func testWorkflowPlanSetPromotionStatus() {
+        var plan = WorkflowPlan(agentKind: .ui, goalPattern: "click login", steps: [])
+        plan.setPromotionStatus(.promoted)
+        XCTAssertEqual(plan.promotionStatus, .promoted)
+    }
+
+    func testWorkflowPromotionStatusAllCases() {
+        let all = WorkflowPromotionStatus.allCases
+        XCTAssertTrue(all.contains(.candidate))
+        XCTAssertTrue(all.contains(.promoted))
+        XCTAssertTrue(all.contains(.rejected))
+        XCTAssertTrue(all.contains(.stale))
+    }
+}
+
+final class WorkflowIndexTests: XCTestCase {
+
+    func testAddAndRetrievePlan() {
+        let index = WorkflowIndex()
+        let plan = WorkflowPlan(agentKind: .ui, goalPattern: "open browser", steps: [])
+        index.add(plan)
+        XCTAssertNotNil(index.plan(id: plan.id))
+        XCTAssertEqual(index.allPlans().count, 1)
+    }
+
+    func testRemovePlan() {
+        let index = WorkflowIndex()
+        let plan = WorkflowPlan(agentKind: .ui, goalPattern: "open browser", steps: [])
+        index.add(plan)
+        index.remove(id: plan.id)
+        XCTAssertNil(index.plan(id: plan.id))
+        XCTAssertEqual(index.allPlans().count, 0)
+    }
+
+    func testUpdatePlan() {
+        let index = WorkflowIndex()
+        var plan = WorkflowPlan(agentKind: .code, goalPattern: "run tests", steps: [])
+        index.add(plan)
+        plan.setPromotionStatus(.promoted)
+        index.update(plan)
+        XCTAssertEqual(index.plan(id: plan.id)?.promotionStatus, .promoted)
+    }
+
+    func testPromotedPlansFiltersByStatus() {
+        let index = WorkflowIndex()
+        var candidate = WorkflowPlan(agentKind: .ui, goalPattern: "login", steps: [])
+        var promoted = WorkflowPlan(agentKind: .ui, goalPattern: "search", steps: [])
+        promoted.setPromotionStatus(.promoted)
+        index.add(candidate)
+        index.add(promoted)
+        let results = index.promotedPlans()
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results.first?.goalPattern, "search")
+        _ = candidate  // suppress unused warning
+    }
+
+    func testPromotedPlansFiltersByAgentKind() {
+        let index = WorkflowIndex()
+        var p1 = WorkflowPlan(agentKind: .ui, goalPattern: "login", steps: [])
+        var p2 = WorkflowPlan(agentKind: .code, goalPattern: "compile", steps: [])
+        p1.setPromotionStatus(.promoted)
+        p2.setPromotionStatus(.promoted)
+        index.add(p1)
+        index.add(p2)
+        let uiResults = index.promotedPlans(for: .ui)
+        XCTAssertEqual(uiResults.count, 1)
+        XCTAssertEqual(uiResults.first?.agentKind, .ui)
+    }
+
+    func testMatchingByGoalPatternOverlap() {
+        let index = WorkflowIndex()
+        let plan = WorkflowPlan(agentKind: .ui, goalPattern: "open browser navigate", steps: [])
+        index.add(plan)
+        let goal = Goal(description: "open browser")
+        let matches = index.matching(goal: goal)
+        XCTAssertFalse(matches.isEmpty)
+    }
+
+    func testSweepStaleRemovesOldPlans() {
+        let index = WorkflowIndex()
+        let plan = WorkflowPlan(agentKind: .code, goalPattern: "old workflow", steps: [], createdAt: Date(timeIntervalSinceNow: -8 * 86400))
+        index.add(plan)
+        let removed = index.sweepStale()
+        XCTAssertEqual(removed, 1)
+        XCTAssertEqual(index.allPlans().count, 0)
+    }
+}
+
+final class WorkflowMatcherTests: XCTestCase {
+
+    func testMatchReturnsEmptyWhenNoPromotedPlans() {
+        let index = WorkflowIndex()
+        let plan = WorkflowPlan(agentKind: .ui, goalPattern: "login via browser", steps: [])
+        index.add(plan)  // stays candidate
+        let matcher = WorkflowMatcher()
+        let goal = Goal(description: "login via browser")
+        let matches = matcher.match(goal: goal, index: index)
+        XCTAssertTrue(matches.isEmpty)
+    }
+
+    func testMatchReturnsPromotedPlans() {
+        let index = WorkflowIndex()
+        let step = WorkflowStep(actionType: "click", skillName: "UISkill", agentKind: .ui)
+        var plan = WorkflowPlan(agentKind: .ui, goalPattern: "click login button", steps: [step])
+        plan.setPromotionStatus(.promoted)
+        index.add(plan)
+        let matcher = WorkflowMatcher()
+        let goal = Goal(description: "click login button")
+        let matches = matcher.match(goal: goal, index: index)
+        XCTAssertFalse(matches.isEmpty)
+        XCTAssertEqual(matches.first?.workflowID, plan.id)
+    }
+
+    func testMatchConfidenceIsPositive() {
+        let index = WorkflowIndex()
+        var plan = WorkflowPlan(agentKind: .ui, goalPattern: "open settings menu", steps: [
+            WorkflowStep(actionType: "click", skillName: "UISkill", agentKind: .ui)
+        ])
+        plan.setPromotionStatus(.promoted)
+        index.add(plan)
+        let matcher = WorkflowMatcher()
+        let goal = Goal(description: "open settings menu")
+        let matches = matcher.match(goal: goal, index: index)
+        XCTAssertTrue((matches.first?.confidence ?? 0) > 0)
+    }
+
+    func testMatchSortedByConfidenceDescending() {
+        let index = WorkflowIndex()
+        var p1 = WorkflowPlan(agentKind: .ui, goalPattern: "login", steps: [
+            WorkflowStep(actionType: "click", skillName: "UISkill", agentKind: .ui)
+        ])
+        var p2 = WorkflowPlan(agentKind: .ui, goalPattern: "login to dashboard via browser click submit", steps: [
+            WorkflowStep(actionType: "click", skillName: "UISkill", agentKind: .ui)
+        ])
+        p1.setPromotionStatus(.promoted)
+        p2.setPromotionStatus(.promoted)
+        // p2 has many overlapping words — make it succeed more so it ranks higher
+        for _ in 0..<5 { p2.recordSuccess() }
+        index.add(p1)
+        index.add(p2)
+        let matcher = WorkflowMatcher()
+        let goal = Goal(description: "login to dashboard")
+        let matches = matcher.match(goal: goal, index: index)
+        if matches.count >= 2 {
+            XCTAssertGreaterThanOrEqual(matches[0].confidence, matches[1].confidence)
+        }
+    }
+}
+
+final class WorkflowSynthesizerTests: XCTestCase {
+
+    private func trace(_ actionType: String, success: Bool) -> ExecutionTrace {
+        ExecutionTrace(actionID: UUID().uuidString, actionType: actionType,
+                       preStateHash: "pre", postStateHash: "post",
+                       verified: success, success: success)
+    }
+
+    func testSynthesizeReturnsNilForEmptyTraces() {
+        let result = WorkflowSynthesizer.synthesize(from: [], goalPattern: "test goal")
+        XCTAssertNil(result)
+    }
+
+    func testSynthesizeReturnsNilForSingleTrace() {
+        let result = WorkflowSynthesizer.synthesize(from: [trace("click", success: true)], goalPattern: "test goal")
+        XCTAssertNil(result)
+    }
+
+    func testSynthesizeReturnsNilWhenNoSuccessfulTraces() {
+        let result = WorkflowSynthesizer.synthesize(from: [trace("click", success: false), trace("type", success: false)], goalPattern: "test goal")
+        XCTAssertNil(result)
+    }
+
+    func testSynthesizeCreatesWorkflowFromSuccessfulTraces() {
+        let result = WorkflowSynthesizer.synthesize(
+            from: [trace("click", success: true), trace("type", success: true)],
+            goalPattern: "fill form"
+        )
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.steps.count, 2)
+        XCTAssertEqual(result?.goalPattern, "fill form")
+        XCTAssertEqual(result?.promotionStatus, .candidate)
+    }
+
+    func testSynthesizeFiltersOutFailedTraces() {
+        let result = WorkflowSynthesizer.synthesize(
+            from: [trace("click", success: true), trace("fail_step", success: false), trace("type", success: true)],
+            goalPattern: "partial form"
+        )
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.steps.count, 2)
+        XCTAssertFalse(result?.steps.contains { $0.actionType == "fail_step" } ?? true)
+    }
+
+    func testSynthesizerDedupedRemovesConsecutiveDuplicates() {
+        let result = WorkflowSynthesizer.synthesizeDeduped(
+            from: [trace("click", success: true), trace("click", success: true), trace("type", success: true)],
+            goalPattern: "click then type"
+        )
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result?.steps.count, 2)  // click + type (duplicate click removed)
+    }
+}
+
+final class WorkflowPromoterTests: XCTestCase {
+
+    func testShouldPromoteRequiresThreshold() {
+        var plan = WorkflowPlan(agentKind: .ui, goalPattern: "login", steps: [])
+        for _ in 0..<(WorkflowPromoter.promotionThreshold - 1) {
+            plan.recordSuccess()
+        }
+        XCTAssertFalse(WorkflowPromoter.shouldPromote(plan))
+    }
+
+    func testShouldPromoteReturnsTrueAtThreshold() {
+        var plan = WorkflowPlan(agentKind: .ui, goalPattern: "login", steps: [])
+        for _ in 0..<WorkflowPromoter.promotionThreshold {
+            plan.recordSuccess()
+        }
+        XCTAssertTrue(WorkflowPromoter.shouldPromote(plan))
+    }
+
+    func testEvaluatePromotesCandidateAtThreshold() {
+        var plan = WorkflowPlan(agentKind: .code, goalPattern: "run tests", steps: [])
+        for _ in 0..<WorkflowPromoter.promotionThreshold {
+            WorkflowPromoter.recordOutcome(success: true, plan: &plan)
+        }
+        WorkflowPromoter.evaluate(plan: &plan)
+        XCTAssertEqual(plan.promotionStatus, .promoted)
+    }
+
+    func testEvaluateDoesNotPromoteBelowThreshold() {
+        var plan = WorkflowPlan(agentKind: .code, goalPattern: "run tests", steps: [])
+        WorkflowPromoter.recordOutcome(success: true, plan: &plan)
+        WorkflowPromoter.evaluate(plan: &plan)
+        XCTAssertEqual(plan.promotionStatus, .candidate)
+    }
+
+    func testEvaluateRejectsPromotedPlanWithTooManyFailures() {
+        var plan = WorkflowPlan(agentKind: .ui, goalPattern: "search", steps: [])
+        // Promote it first
+        for _ in 0..<WorkflowPromoter.promotionThreshold {
+            WorkflowPromoter.recordOutcome(success: true, plan: &plan)
+        }
+        WorkflowPromoter.evaluate(plan: &plan)
+        XCTAssertEqual(plan.promotionStatus, .promoted)
+        // Now accumulate failures
+        for _ in 0..<WorkflowPromoter.rejectionThreshold {
+            WorkflowPromoter.recordOutcome(success: false, plan: &plan)
+        }
+        WorkflowPromoter.evaluate(plan: &plan)
+        XCTAssertEqual(plan.promotionStatus, .rejected)
+    }
+
+    func testRejectedPlanIsTerminal() {
+        var plan = WorkflowPlan(agentKind: .ui, goalPattern: "click nav", steps: [])
+        plan.setPromotionStatus(.rejected)
+        // Simulate successes — should not re-promote
+        for _ in 0..<10 {
+            WorkflowPromoter.recordOutcome(success: true, plan: &plan)
+        }
+        WorkflowPromoter.evaluate(plan: &plan)
+        XCTAssertEqual(plan.promotionStatus, .rejected)
+    }
+}
+
+final class RuntimeWorkflowWiringTests: XCTestCase {
+
+    func testRuntimeHasWorkflowIndex() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.workflowIndex)
+    }
+
+    func testRuntimeHasWorkflowMatcher() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.workflowMatcher)
+    }
+
+    func testWorkflowIndexStartsEmpty() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertEqual(runtime.workflowIndex.allPlans().count, 0)
+    }
+
+    func testRoundTripWorkflowThroughRuntime() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        // Synthesize a workflow
+        let mkTrace = { (type: String) in
+            ExecutionTrace(actionID: UUID().uuidString, actionType: type,
+                           preStateHash: "pre", postStateHash: "post",
+                           verified: true, success: true)
+        }
+        let t1 = mkTrace("click")
+        let t2 = mkTrace("type")
+        let t3 = mkTrace("submit")
+        guard let plan = WorkflowSynthesizer.synthesize(from: [t1, t2, t3], goalPattern: "fill login form") else {
+            XCTFail("Synthesizer should produce a plan from 3 successful traces")
+            return
+        }
+        runtime.workflowIndex.add(plan)
+        XCTAssertEqual(runtime.workflowIndex.allPlans().count, 1)
+        // Match (candidate — should not match promoted filter)
+        let goal = Goal(description: "fill login form")
+        let matches = runtime.workflowMatcher.match(goal: goal, index: runtime.workflowIndex)
+        XCTAssertTrue(matches.isEmpty, "Candidate plans should not match — requires promotion")
+    }
+}

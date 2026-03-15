@@ -101,6 +101,20 @@ public final class OracleRuntime {
     /// The integrated agent control loop — ties all coordinators together.
     public private(set) lazy var agentLoop: AgentLoop = AgentLoop(runtime: self)
 
+    // ── Strategy layer ───────────────────────────────────
+
+    /// Chooses the high-level strategy at the start of each planning cycle.
+    public private(set) lazy var strategySelector: StrategySelector = StrategySelector()
+
+    /// Tracks the active strategy and decides when to re-evaluate.
+    public private(set) lazy var strategyEvaluator: StrategyEvaluator = StrategyEvaluator()
+
+    /// In-memory catalogue of candidate and promoted workflow plans.
+    public private(set) lazy var workflowIndex: WorkflowIndex = WorkflowIndex()
+
+    /// Matches an incoming goal to promoted workflow plans in the index.
+    public private(set) lazy var workflowMatcher: WorkflowMatcher = WorkflowMatcher()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -147,7 +161,15 @@ public final class OracleRuntime {
         _ = learningCoordinator
         _ = agentLoop
 
-        // 8. Diagnostics baseline
+        // 8. Strategy layer warm-up
+        _ = strategySelector
+        _ = strategyEvaluator
+
+        // 9. Workflow layer warm-up
+        _ = workflowIndex
+        _ = workflowMatcher
+
+        // 10. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()
