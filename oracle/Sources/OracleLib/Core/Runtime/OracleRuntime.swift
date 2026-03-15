@@ -68,6 +68,10 @@ public final class OracleRuntime {
         planningGraphEngine: planningGraphEngine
     )
 
+    // ── Skills registry ──────────────────────────────────
+
+    public private(set) lazy var skillRegistry: SkillRegistry = SkillRegistry.live()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -104,7 +108,10 @@ public final class OracleRuntime {
         // 5. Wire candidate generator into search controller
         searchController.attachCandidateGenerator(candidateGenerator)
 
-        // 6. Diagnostics baseline
+        // 6. Load skill registry (triggers lazy init, registering all built-in skills)
+        _ = skillRegistry
+
+        // 7. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()

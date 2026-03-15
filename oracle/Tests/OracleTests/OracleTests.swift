@@ -2570,3 +2570,235 @@ final class SearchControllerCandidateTests: XCTestCase {
         XCTAssertEqual(runtime.candidateGenerator.maxCandidates, 6)
     }
 }
+
+// MARK: - 44. Skill Protocol + SkillResolution Tests
+
+final class SkillProtocolTests: XCTestCase {
+
+    func testSkillResolutionInit() {
+        let intent = ActionIntent(type: "click", domain: .host, parameters: ["targetID": "btn1"])
+        let res = SkillResolution(intent: intent, resolvedTargetID: "btn1", confidence: 0.9, notes: ["note"])
+        XCTAssertEqual(res.intent.type, "click")
+        XCTAssertEqual(res.resolvedTargetID, "btn1")
+        XCTAssertEqual(res.confidence, 0.9, accuracy: 0.001)
+        XCTAssertEqual(res.notes.count, 1)
+    }
+
+    func testSkillResolutionDefaults() {
+        let intent = ActionIntent(type: "type", domain: .host)
+        let res = SkillResolution(intent: intent)
+        XCTAssertNil(res.resolvedTargetID)
+        XCTAssertEqual(res.confidence, 1.0, accuracy: 0.001)
+        XCTAssertTrue(res.notes.isEmpty)
+    }
+
+    func testSkillResolutionErrorDescriptions() {
+        XCTAssertTrue(SkillResolutionError.noCandidate("x").description.contains("x"))
+        XCTAssertTrue(SkillResolutionError.ambiguousTarget("t", 0.5).description.contains("0.5"))
+        XCTAssertTrue(SkillResolutionError.unsupportedOperation("op").description.contains("op"))
+    }
+
+    func testCodeSkillResolutionErrorDescriptions() {
+        XCTAssertTrue(CodeSkillResolutionError.missingWorkspace.description.contains("workspace"))
+        XCTAssertTrue(CodeSkillResolutionError.noRelevantFiles("fs").description.contains("fs"))
+        XCTAssertTrue(CodeSkillResolutionError.ambiguousEditTarget("e").description.contains("e"))
+    }
+}
+
+// MARK: - 45. OS Skill Tests
+
+final class OSSkillTests: XCTestCase {
+
+    private func makeSnapshot() -> WorldModelSnapshot {
+        WorldModelSnapshot(
+            snapshotID: UUID().uuidString,
+            capturedAt: Date(),
+            elements: [],
+            focusedApp: "TestApp",
+            frontmostURL: nil,
+            clipboardSnippet: nil,
+            buildSucceeded: nil,
+            gitClean: nil,
+            failingTestCount: 0,
+            elementCount: 0,
+            interactableCount: 0,
+            textInputCount: 0
+        )
+    }
+
+    func testReadFileSkillResolves() throws {
+        let skill = ReadFileSkill()
+        XCTAssertEqual(skill.name, "read_file")
+        let snap = makeSnapshot()
+        let res = try skill.resolve(query: "/tmp/test.swift", worldSnapshot: snap, parameters: [:])
+        XCTAssertEqual(res.intent.type, "read_file")
+        XCTAssertEqual(res.intent.domain, .host)
+        XCTAssertEqual(res.intent.parameters["path"], "/tmp/test.swift")
+        XCTAssertEqual(res.confidence, 1.0, accuracy: 0.001)
+    }
+
+    func testReadFileSkillPrefersPathParameter() throws {
+        let skill = ReadFileSkill()
+        let snap = makeSnapshot()
+        let res = try skill.resolve(query: "ignored", worldSnapshot: snap, parameters: ["path": "/explicit/path.swift"])
+        XCTAssertEqual(res.intent.parameters["path"], "/explicit/path.swift")
+    }
+
+    func testOpenAppSkillResolves() throws {
+        let skill = OpenAppSkill()
+        XCTAssertEqual(skill.name, "open_app")
+        let snap = makeSnapshot()
+        let res = try skill.resolve(query: "Safari", worldSnapshot: snap, parameters: ["app": "Safari"])
+        XCTAssertEqual(res.intent.type, "open_app")
+        XCTAssertEqual(res.intent.parameters["app"], "Safari")
+    }
+
+    func testClickSkillThrowsWhenNoMatch() {
+        let skill = ClickSkill()
+        let snap = makeSnapshot() // empty elements → no match
+        XCTAssertThrowsError(
+            try skill.resolve(query: "nonexistent-btn", worldSnapshot: snap, parameters: [:])
+        ) { error in
+            if case SkillResolutionError.noCandidate(_) = error {
+                // expected
+            } else {
+                XCTFail("Expected noCandidate error")
+            }
+        }
+    }
+}
+
+// MARK: - 46. Code Skill + SkillRegistry Tests
+
+final class CodeSkillTests: XCTestCase {
+
+    func testRunBuildSkillResolves() throws {
+        let skill = RunBuildSkill()
+        XCTAssertEqual(skill.name, "run_build")
+        let res = try skill.resolve(goal: "build", workspaceRoot: "/workspace", parameters: [:])
+        XCTAssertEqual(res.intent.type, "run_build")
+        XCTAssertEqual(res.intent.domain, .code)
+        XCTAssertEqual(res.intent.parameters["command"], "swift build")
+        XCTAssertEqual(res.intent.parameters["workspaceRoot"], "/workspace")
+    }
+
+    func testRunBuildSkillCustomCommand() throws {
+        let skill = RunBuildSkill()
+        let res = try skill.resolve(goal: "build", workspaceRoot: "/ws", parameters: ["buildCommand": "xcodebuild"])
+        XCTAssertEqual(res.intent.parameters["command"], "xcodebuild")
+    }
+
+    func testRunBuildSkillThrowsWhenNoRoot() {
+        let skill = RunBuildSkill()
+        XCTAssertThrowsError(try skill.resolve(goal: "build", workspaceRoot: nil, parameters: [:]))
+    }
+
+    func testGitStatusSkillResolves() throws {
+        let skill = GitStatusSkill()
+        XCTAssertEqual(skill.name, "git_status")
+        let res = try skill.resolve(goal: "", workspaceRoot: "/repo", parameters: [:])
+        XCTAssertEqual(res.intent.type, "git_status")
+        XCTAssertEqual(res.intent.domain, .tool)
+        XCTAssertEqual(res.intent.parameters["command"], "git")
+        XCTAssertTrue(res.intent.parameters["args"]?.contains("--short") ?? false)
+    }
+
+    func testGitCommitSkillResolves() throws {
+        let skill = GitCommitSkill()
+        let res = try skill.resolve(goal: "", workspaceRoot: "/repo", parameters: ["message": "feat: add skills"])
+        XCTAssertEqual(res.intent.type, "git_commit")
+        XCTAssertEqual(res.intent.parameters["message"], "feat: add skills")
+        XCTAssertTrue(res.notes.first?.contains("feat: add skills") ?? false)
+    }
+
+    func testGitCommitThrowsWhenNoMessage() {
+        let skill = GitCommitSkill()
+        XCTAssertThrowsError(try skill.resolve(goal: "", workspaceRoot: "/repo", parameters: [:]))
+    }
+
+    func testParseBuildFailureSkillExtractsErrorLine() throws {
+        let skill = ParseBuildFailureSkill()
+        let output = "compiling...\nSources/Foo.swift:10:5: error: use of unresolved identifier 'bar'\nbuild failed"
+        let res = try skill.resolve(goal: "", workspaceRoot: nil, parameters: ["output": output])
+        XCTAssertEqual(res.intent.type, "parse_build_failure")
+        XCTAssertTrue(res.intent.parameters["errorLine"]?.contains("unresolved identifier") ?? false)
+    }
+
+    func testParseTestFailureSkillExtractsFailureLine() throws {
+        let skill = ParseTestFailureSkill()
+        let output = "Test Suite 'All tests' started\nFAILED: testFoo - expected 1 but got 2\nTest Suite ended"
+        let res = try skill.resolve(goal: "", workspaceRoot: nil, parameters: ["output": output])
+        XCTAssertEqual(res.intent.type, "parse_test_failure")
+        XCTAssertTrue(res.intent.parameters["failedLine"]?.contains("FAILED") ?? false)
+    }
+
+    func testSkillRegistryLiveCount() {
+        let registry = SkillRegistry.live()
+        // 8 OS skills + 14 code skills = 22 total
+        XCTAssertEqual(registry.totalCount, 22)
+    }
+
+    func testSkillRegistryOSLookup() {
+        let registry = SkillRegistry.live()
+        XCTAssertNotNil(registry.get("click"))
+        XCTAssertNotNil(registry.get("type"))
+        XCTAssertNotNil(registry.get("read_file"))
+        XCTAssertNil(registry.get("nonexistent"))
+    }
+
+    func testSkillRegistryCodeLookup() {
+        let registry = SkillRegistry.live()
+        XCTAssertNotNil(registry.getCode("run_build"))
+        XCTAssertNotNil(registry.getCode("git_commit"))
+        XCTAssertNotNil(registry.getCode("parse_test_failure"))
+        XCTAssertNil(registry.getCode("click")) // OS skills not in code registry
+    }
+
+    func testSkillRegistryAllNames() {
+        let registry = SkillRegistry.live()
+        let osNames = registry.allSkillNames
+        let codeNames = registry.allCodeSkillNames
+        XCTAssertTrue(osNames.contains("click"))
+        XCTAssertTrue(codeNames.contains("git_push"))
+        XCTAssertTrue(codeNames.contains("search_code"))
+    }
+
+    func testRuntimeHasSkillRegistry() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertEqual(runtime.skillRegistry.totalCount, 22)
+        XCTAssertNotNil(runtime.skillRegistry.get("click"))
+        XCTAssertNotNil(runtime.skillRegistry.getCode("run_build"))
+    }
+
+    func testCodeSkillSupportRequireWorkspaceRoot() {
+        XCTAssertNoThrow(try CodeSkillSupport.requireWorkspaceRoot("/workspace"))
+        XCTAssertThrowsError(try CodeSkillSupport.requireWorkspaceRoot(nil))
+        XCTAssertThrowsError(try CodeSkillSupport.requireWorkspaceRoot(""))
+    }
+
+    func testCodeSkillSupportShellIntent() {
+        let intent = CodeSkillSupport.shellIntent(
+            name: "run_linter",
+            workspaceRoot: "/proj",
+            command: "swiftlint",
+            args: ["--strict"]
+        )
+        XCTAssertEqual(intent.type, "run_linter")
+        XCTAssertEqual(intent.domain, .code)
+        XCTAssertEqual(intent.parameters["command"], "swiftlint")
+        XCTAssertEqual(intent.parameters["workspaceRoot"], "/proj")
+        XCTAssertTrue(intent.parameters["args"]?.contains("--strict") ?? false)
+    }
+
+    func testCodeSkillSupportGitIntent() {
+        let intent = CodeSkillSupport.gitIntent(
+            name: "git_push",
+            workspaceRoot: "/repo",
+            args: ["push", "origin", "main"]
+        )
+        XCTAssertEqual(intent.domain, .tool)
+        XCTAssertEqual(intent.parameters["command"], "git")
+        XCTAssertTrue(intent.parameters["args"]?.contains("origin") ?? false)
+    }
+}
