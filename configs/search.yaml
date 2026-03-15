@@ -1,0 +1,24 @@
+# Search Configuration
+
+search:
+  # Metasearch (SearXNG)
+  metasearch:
+    url: "http://127.0.0.1:8084"
+    timeout: 15
+    default_engines:
+      - google
+      - duckduckgo
+      - bing
+    max_results: 10
+
+  # Code index
+  codeindex:
+    url: "http://127.0.0.1:8081"
+    timeout: 10
+    auto_index_on_boot: false
+
+  # Ranking
+  ranking:
+    recency_weight: 0.3
+    relevance_weight: 0.5
+    authority_weight: 0.2

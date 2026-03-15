@@ -1,0 +1,21 @@
+# Crawler Sidecar Configuration
+
+crawler:
+  port: 8083
+  host: "0.0.0.0"
+
+  # Request limits
+  request_timeout: 15
+  max_content_length: 50000
+  max_batch_size: 10
+  user_agent: "OracleCrawler/1.0"
+
+  # Rate limiting
+  rate_limit:
+    requests_per_second: 2
+    burst: 5
+
+  # Output format
+  output:
+    format: "markdown"
+    include_metadata: true

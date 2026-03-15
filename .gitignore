@@ -1,0 +1,22 @@
+# Swift / SPM
+.build/
+.swiftpm/
+Packages/
+*.xcodeproj
+*.xcworkspace
+
+# Oracle DBs and Logs
+data/*.db
+data/*.sqlite
+data/*.sqlite-journal
+logs/
+*.log
+
+# Python Sidecars
+__pycache__/
+*.pyc
+venv/
+.env
+
+# OS Files
+.DS_Store
