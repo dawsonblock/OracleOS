@@ -10,7 +10,10 @@ import Foundation
 public enum RuntimeEvent {
     case planGenerated(Plan)
     case actionCompleted(ActionIntent, ExecutionResult)
+    case criticEvaluated(ActionIntent, CriticEvaluation)
+    case recoveryAttempted(ActionIntent, RecoveryDecision)
     case goalCompleted(Goal)
+    case goalAborted(Goal, String)  // goal + reason
     case policyBlocked(ActionIntent)
     case systemStarted
     case systemStopping

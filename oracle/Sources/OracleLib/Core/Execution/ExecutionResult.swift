@@ -14,18 +14,24 @@ public struct ExecutionResult {
     public let executedThroughExecutor: Bool
     public let timestamp: Date
     public let actionID: String
+    public let preStateHash: String
+    public let postStateHash: String
 
     public init(
         success: Bool,
         detail: String = "",
         executedThroughExecutor: Bool = true,
-        actionID: String = ""
+        actionID: String = "",
+        preStateHash: String = "",
+        postStateHash: String = ""
     ) {
         self.success = success
         self.detail = detail
         self.executedThroughExecutor = executedThroughExecutor
         self.timestamp = Date()
         self.actionID = actionID
+        self.preStateHash = preStateHash
+        self.postStateHash = postStateHash
     }
 
     public static func blocked(actionID: String, reason: String) -> ExecutionResult {
@@ -33,7 +39,9 @@ public struct ExecutionResult {
             success: false,
             detail: "BLOCKED: \(reason)",
             executedThroughExecutor: false,
-            actionID: actionID
+            actionID: actionID,
+            preStateHash: "",
+            postStateHash: ""
         )
     }
 }

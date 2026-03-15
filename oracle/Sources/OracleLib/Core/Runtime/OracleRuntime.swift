@@ -34,6 +34,11 @@ public final class OracleRuntime {
     public let contextRetriever = ContextRetriever()
     public lazy var searchController = SearchController(codeQuery: codeQuery, graphStore: memory, webExtractor: webExtractor)
 
+    // ── Critic + Recovery ───────────────────────────────
+
+    public let critic = CriticLoop()
+    public let recovery = RecoveryCoordinator()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -96,11 +101,13 @@ public final class OracleRuntime {
     // goal
     //   → context retrieval
     //   → plan generation
-    //   → policy validation
-    //   → action execution
-    //   → verification
-    //   → trace recording
-    //   → memory update
+    //   → for each action:
+    //       → policy validation
+    //       → action execution
+    //       → critic evaluation
+    //       → on failure: recovery (retry / skip / abort)
+    //       → trace recording
+    //       → memory update
 
     public func process(goal: Goal) {
 
@@ -112,43 +119,159 @@ public final class OracleRuntime {
 
         eventBus.emit(.planGenerated(plan))
 
+        var aborted = false
+
         for action in plan.actions {
 
-            // Policy gate
+            // ── Policy gate ──────────────────────────────
             guard policy.allow(action: action) else {
                 print("[oracle] BLOCKED by policy: \(action.type)")
                 traceRecorder.record(
                     TraceEvent(action: action, outcome: .blocked, detail: "policy denied")
                 )
+                eventBus.emit(.policyBlocked(action))
                 continue
             }
 
-            // Risk routing: sandbox vs local
-            let result: ExecutionResult
-            if policy.requiresSandbox(action: action) {
-                result = sandboxExecutor.run(action: action)
-            } else {
-                result = executor.execute(action: action)
-            }
-
-            // Memory commit
-            memory.record(result: result, forAction: action)
-
-            // Trace
-            let outcome: TraceOutcome = result.success ? .success : .failure
-            traceRecorder.record(
-                TraceEvent(action: action, outcome: outcome, detail: result.detail)
+            // ── Execute (with recovery loop) ─────────────
+            let (finalResult, finalEvaluation) = executeWithRecovery(
+                action: action,
+                goalID: goal.id
             )
 
-            eventBus.emit(.actionCompleted(action, result))
+            // ── Memory commit ────────────────────────────
+            memory.record(result: finalResult, forAction: action)
 
-            // Halt plan on failure (bounded execution)
-            if !result.success {
-                print("[oracle] Action failed, halting plan: \(action.type)")
+            // ── Trace ────────────────────────────────────
+            let outcome: TraceOutcome = finalResult.success ? .success : .failure
+            traceRecorder.record(
+                TraceEvent(action: action, outcome: outcome, detail: finalResult.detail)
+            )
+
+            eventBus.emit(.actionCompleted(action, finalResult))
+            eventBus.emit(.criticEvaluated(action, finalEvaluation))
+
+            // ── Abort if recovery coordinator says so ────
+            if case .abort(let reason) = shouldAbort(evaluation: finalEvaluation, action: action, goalID: goal.id) {
+                print("[oracle] ABORT: \(reason)")
+                eventBus.emit(.goalAborted(goal, reason))
+                aborted = true
+                break
+            }
+
+            // ── Halt plan on unrecovered failure ─────────
+            if !finalResult.success && finalEvaluation.verdict == .failure {
+                print("[oracle] Action failed after recovery, halting plan: \(action.type)")
                 break
             }
         }
 
-        eventBus.emit(.goalCompleted(goal))
+        // Clean up recovery state for this goal
+        recovery.clearState(forGoal: goal.id)
+
+        if !aborted {
+            eventBus.emit(.goalCompleted(goal))
+        }
+    }
+
+    // ── Execution + Recovery loop ───────────────────────
+    //
+    // Executes an action, evaluates via critic, and if the
+    // critic signals failure, asks the RecoveryCoordinator
+    // for a decision. Retries are bounded.
+
+    private func executeWithRecovery(
+        action: ActionIntent,
+        goalID: String
+    ) -> (ExecutionResult, CriticEvaluation) {
+
+        var currentAction = action
+        var attempts = 0
+        let maxAttempts = RecoveryCoordinator.maxRetriesPerAction + 1
+
+        while attempts < maxAttempts {
+            attempts += 1
+
+            // Execute
+            let result: ExecutionResult
+            if policy.requiresSandbox(action: currentAction) {
+                result = sandboxExecutor.run(action: currentAction)
+            } else {
+                result = executor.execute(action: currentAction)
+            }
+
+            // Critic evaluation
+            let evaluation = critic.evaluate(
+                action: currentAction,
+                result: result,
+                preStateHash: result.preStateHash,
+                postStateHash: result.postStateHash
+            )
+
+            // Success or partial success — accept and move on
+            if evaluation.verdict == .success {
+                return (result, evaluation)
+            }
+
+            if evaluation.verdict == .partialSuccess {
+                // Accept partial success — side effects already happened
+                return (result, evaluation)
+            }
+
+            // Failure or unknown — ask recovery coordinator
+            let decision = recovery.recover(
+                action: currentAction,
+                evaluation: evaluation,
+                goalID: goalID
+            )
+
+            eventBus.emit(.recoveryAttempted(currentAction, decision))
+
+            switch decision {
+            case .retry(let retryAction):
+                currentAction = retryAction
+                continue
+
+            case .skip(let reason):
+                print("[oracle] Skipping \(currentAction.type): \(reason)")
+                return (result, evaluation)
+
+            case .abort(let reason):
+                print("[oracle] Recovery abort: \(reason)")
+                return (result, evaluation)
+            }
+        }
+
+        // Should not reach here, but defensive return
+        let fallbackResult = ExecutionResult(
+            success: false,
+            detail: "max recovery attempts exceeded",
+            executedThroughExecutor: true,
+            actionID: currentAction.id
+        )
+        let fallbackEval = critic.evaluate(
+            action: currentAction,
+            result: fallbackResult,
+            preStateHash: "",
+            postStateHash: ""
+        )
+        return (fallbackResult, fallbackEval)
+    }
+
+    /// Check if the recovery coordinator recommends aborting the entire goal
+    private func shouldAbort(
+        evaluation: CriticEvaluation,
+        action: ActionIntent,
+        goalID: String
+    ) -> RecoveryDecision? {
+        // Only check for abort if critic recommends recovery
+        guard critic.shouldRecommendRecovery() else { return nil }
+
+        // Check if goal-level budget is exhausted
+        if let state = recovery.state(forGoal: goalID),
+           state.totalRecoveryAttempts >= RecoveryCoordinator.maxRecoveryPerGoal {
+            return .abort(reason: "goal recovery budget exhausted")
+        }
+        return nil
     }
 }

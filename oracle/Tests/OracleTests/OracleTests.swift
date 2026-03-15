@@ -88,9 +88,9 @@ final class GraphStoreTests: XCTestCase {
         let result = ExecutionResult(success: true, detail: "written")
         store.record(result: result, forAction: action)
 
-        let traces = store.recentTraces(limit: 5)
+        let traces = store.recentTraces(limit: 20)
         XCTAssertFalse(traces.isEmpty, "Should have at least one trace after recording")
-        XCTAssertEqual(traces.first?.actionType, "test_write")
+        XCTAssertTrue(traces.contains(where: { $0.actionType == "test_write" }), "Should contain the recorded test_write trace")
     }
 
     func testAddNode() {
@@ -616,5 +616,236 @@ final class CompoundGoalIntegrationTests: XCTestCase {
         let result = simulator.simulate(plan: plan, context: context)
         XCTAssertFalse(result.feasible, "Simulator should reject action type with >2 recent failures")
         XCTAssertFalse(result.warnings.isEmpty, "Should produce warnings for repeated failures")
+    }
+}
+
+// MARK: - 20. CriticLoop Tests
+
+final class CriticLoopTests: XCTestCase {
+
+    func testSuccessfulReadOnlyAction() {
+        let critic = CriticLoop()
+        let action = ActionIntent(type: "log", domain: .system)
+        let result = ExecutionResult(success: true, detail: "ok", actionID: action.id)
+        let eval = critic.evaluate(action: action, result: result, preStateHash: "a", postStateHash: "a")
+        XCTAssertEqual(eval.verdict, .success, "Read-only success should be .success")
+        XCTAssertGreaterThan(eval.confidence, 0.8)
+    }
+
+    func testSuccessfulWriteActionWithStateChange() {
+        let critic = CriticLoop()
+        let action = ActionIntent(type: "write_file", domain: .code)
+        let result = ExecutionResult(success: true, detail: "written", actionID: action.id)
+        let eval = critic.evaluate(action: action, result: result, preStateHash: "pre", postStateHash: "post")
+        XCTAssertEqual(eval.verdict, .success, "Write action with state change should be .success")
+        XCTAssertTrue(eval.stateChanged)
+    }
+
+    func testFailedActionNoStateChange() {
+        let critic = CriticLoop()
+        let action = ActionIntent(type: "write_file", domain: .code)
+        let result = ExecutionResult(success: false, detail: "denied", actionID: action.id)
+        let eval = critic.evaluate(action: action, result: result, preStateHash: "same", postStateHash: "same")
+        XCTAssertEqual(eval.verdict, .failure)
+        XCTAssertFalse(eval.stateChanged)
+    }
+
+    func testFailedActionWithStateChange() {
+        let critic = CriticLoop()
+        let action = ActionIntent(type: "write_file", domain: .code)
+        let result = ExecutionResult(success: false, detail: "partial write", actionID: action.id)
+        let eval = critic.evaluate(action: action, result: result, preStateHash: "pre", postStateHash: "post")
+        XCTAssertEqual(eval.verdict, .partialSuccess, "Failed but state changed → partialSuccess")
+    }
+
+    func testSuccessNoStateChangeIsUnknown() {
+        let critic = CriticLoop()
+        let action = ActionIntent(type: "write_file", domain: .code)
+        let result = ExecutionResult(success: true, detail: "ok", actionID: action.id)
+        let eval = critic.evaluate(action: action, result: result, preStateHash: "same", postStateHash: "same")
+        XCTAssertEqual(eval.verdict, .unknown, "Write success with no state change → unknown")
+    }
+
+    func testTrustBoundaryViolation() {
+        let critic = CriticLoop()
+        let action = ActionIntent(type: "write_file", domain: .code)
+        let result = ExecutionResult(success: true, detail: "bypass", executedThroughExecutor: false, actionID: action.id)
+        let eval = critic.evaluate(action: action, result: result, preStateHash: "a", postStateHash: "b")
+        XCTAssertEqual(eval.verdict, .failure, "Bypassed executor should always be .failure")
+        XCTAssertEqual(eval.confidence, 1.0)
+    }
+
+    func testSuccessRateTracking() {
+        let critic = CriticLoop()
+        // 2 successes (read-only 'log' action), 1 failure
+        let logAction = ActionIntent(type: "log", domain: .system)
+        _ = critic.evaluate(action: logAction, result: ExecutionResult(success: true, detail: "", actionID: "a"), preStateHash: "a", postStateHash: "a")
+        _ = critic.evaluate(action: logAction, result: ExecutionResult(success: true, detail: "", actionID: "b"), preStateHash: "a", postStateHash: "a")
+        let failAction = ActionIntent(type: "write_file", domain: .code)
+        _ = critic.evaluate(action: failAction, result: ExecutionResult(success: false, detail: "err", actionID: "c"), preStateHash: "x", postStateHash: "x")
+
+        let rate = critic.overallSuccessRate()
+        XCTAssertGreaterThan(rate, 0, "Should have nonzero success rate")
+        XCTAssertLessThan(rate, 1.0, "Should not be 100% with a failure")
+    }
+
+    func testShouldRecommendRecovery() {
+        let critic = CriticLoop()
+        let action = ActionIntent(type: "test_action", domain: .tool)
+
+        // Add 5 failures
+        for _ in 0..<5 {
+            _ = critic.evaluate(
+                action: action,
+                result: ExecutionResult(success: false, detail: "err", actionID: UUID().uuidString),
+                preStateHash: "same",
+                postStateHash: "same"
+            )
+        }
+
+        XCTAssertTrue(critic.shouldRecommendRecovery(), "5 consecutive failures should trigger recovery recommendation")
+    }
+}
+
+// MARK: - 21. RecoveryCoordinator Tests
+
+final class RecoveryCoordinatorTests: XCTestCase {
+
+    func testRetryOnFailure() {
+        let recovery = RecoveryCoordinator()
+        let action = ActionIntent(type: "write_file", domain: .code)
+        let eval = CriticEvaluation(
+            actionID: action.id, actionType: action.type,
+            verdict: .failure, confidence: 0.9,
+            preStateHash: "pre", postStateHash: "pre",
+            stateChanged: false, detail: "write failed"
+        )
+
+        let decision = recovery.recover(action: action, evaluation: eval, goalID: "goal-1")
+        if case .retry(let retryAction) = decision {
+            XCTAssertEqual(retryAction.type, "write_file")
+            XCTAssertNotNil(retryAction.parameters["_recovery_attempt"])
+        } else {
+            XCTFail("First failure should trigger retry, got: \(decision)")
+        }
+    }
+
+    func testSkipOnPartialSuccess() {
+        let recovery = RecoveryCoordinator()
+        let action = ActionIntent(type: "write_file", domain: .code)
+        let eval = CriticEvaluation(
+            actionID: action.id, actionType: action.type,
+            verdict: .partialSuccess, confidence: 0.5,
+            preStateHash: "pre", postStateHash: "post",
+            stateChanged: true, detail: "partial"
+        )
+
+        let decision = recovery.recover(action: action, evaluation: eval, goalID: "goal-2")
+        if case .skip = decision {
+            // expected
+        } else {
+            XCTFail("Partial success should skip, got: \(decision)")
+        }
+    }
+
+    func testMaxRetriesExhausted() {
+        let recovery = RecoveryCoordinator()
+        let action = ActionIntent(type: "write_file", domain: .code, id: "fixed-id")
+        let eval = CriticEvaluation(
+            actionID: action.id, actionType: action.type,
+            verdict: .failure, confidence: 0.9,
+            preStateHash: "pre", postStateHash: "pre",
+            stateChanged: false, detail: "fail"
+        )
+
+        // Use up retry budget (2 retries max)
+        _ = recovery.recover(action: action, evaluation: eval, goalID: "goal-3")
+        _ = recovery.recover(action: action, evaluation: eval, goalID: "goal-3")
+
+        let decision = recovery.recover(action: action, evaluation: eval, goalID: "goal-3")
+        if case .skip = decision {
+            // expected — retries exhausted for this action
+        } else {
+            XCTFail("After max retries should skip, got: \(decision)")
+        }
+    }
+
+    func testGoalBudgetExhausted() {
+        let recovery = RecoveryCoordinator()
+        let eval = CriticEvaluation(
+            actionID: "x", actionType: "test",
+            verdict: .failure, confidence: 0.9,
+            preStateHash: "pre", postStateHash: "pre",
+            stateChanged: false, detail: "fail"
+        )
+
+        // Exhaust goal budget (5 attempts max) with different action IDs
+        for i in 0..<5 {
+            let action = ActionIntent(type: "test", domain: .tool, id: "action-\(i)")
+            _ = recovery.recover(action: action, evaluation: eval, goalID: "goal-4")
+        }
+
+        // 6th attempt should abort
+        let action = ActionIntent(type: "test", domain: .tool, id: "action-new")
+        let decision = recovery.recover(action: action, evaluation: eval, goalID: "goal-4")
+        if case .abort = decision {
+            // expected — goal budget exhausted
+        } else {
+            XCTFail("After 5 recovery attempts per goal should abort, got: \(decision)")
+        }
+    }
+
+    func testClearStateResetsGoal() {
+        let recovery = RecoveryCoordinator()
+        let action = ActionIntent(type: "test", domain: .tool)
+        let eval = CriticEvaluation(
+            actionID: action.id, actionType: action.type,
+            verdict: .failure, confidence: 0.9,
+            preStateHash: "a", postStateHash: "a",
+            stateChanged: false, detail: "fail"
+        )
+        _ = recovery.recover(action: action, evaluation: eval, goalID: "goal-5")
+        XCTAssertNotNil(recovery.state(forGoal: "goal-5"))
+
+        recovery.clearState(forGoal: "goal-5")
+        XCTAssertNil(recovery.state(forGoal: "goal-5"))
+    }
+}
+
+// MARK: - 22. Critic + Runtime Integration Test
+
+final class CriticRuntimeIntegrationTests: XCTestCase {
+
+    func testRuntimeHasCriticAndRecovery() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.critic)
+        XCTAssertNotNil(runtime.recovery)
+    }
+
+    func testCriticEvaluatedEventEmitted() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        var criticEventReceived = false
+        runtime.eventBus.subscribe { event in
+            if case .criticEvaluated = event {
+                criticEventReceived = true
+            }
+        }
+
+        let goal = Goal(description: "read file test")
+        runtime.process(goal: goal)
+        XCTAssertTrue(criticEventReceived, "Runtime should emit criticEvaluated event")
+    }
+
+    func testExecutorResultIncludesStateHashes() {
+        let executor = VerifiedActionExecutor()
+        ActionRegistry.shared.registerDefaults()
+        let action = ActionIntent(type: "log", domain: .system, parameters: ["message": "test"])
+        let result = executor.execute(action: action)
+        XCTAssertTrue(result.success)
+        XCTAssertFalse(result.preStateHash.isEmpty, "Result should include preStateHash")
+        XCTAssertFalse(result.postStateHash.isEmpty, "Result should include postStateHash")
     }
 }

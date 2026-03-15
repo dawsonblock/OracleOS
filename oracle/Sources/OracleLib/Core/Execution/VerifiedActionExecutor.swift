@@ -73,15 +73,17 @@ public final class VerifiedActionExecutor {
             rawResult: rawResult
         )
 
-        // 7. Stamp and return
+        // 7. Stamp and return (include state hashes for critic evaluation)
         let result = ExecutionResult(
             success: verified && rawResult.success,
             detail: rawResult.detail,
             executedThroughExecutor: true,
-            actionID: action.id
+            actionID: action.id,
+            preStateHash: preState,
+            postStateHash: postState
         )
 
-        // 8. Execution trace
+        // 8. Execution trace — record through TraceRecorder if attached
         let trace = ExecutionTrace(
             actionID: action.id,
             actionType: action.type,
@@ -90,7 +92,14 @@ public final class VerifiedActionExecutor {
             verified: verified,
             success: result.success
         )
-        _ = trace // stored via TraceRecorder at runtime level
+        traceRecorder?.record(
+            TraceEvent(
+                action: action,
+                outcome: result.success ? .success : .failure,
+                detail: result.detail
+            )
+        )
+        _ = trace
 
         return result
     }
