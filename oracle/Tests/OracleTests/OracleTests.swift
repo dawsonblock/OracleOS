@@ -1211,3 +1211,405 @@ final class DashboardMetricsIntegrationTests: XCTestCase {
         XCTAssertFalse(traces[0].steps.isEmpty, "Replay trace should contain steps")
     }
 }
+
+// MARK: - 27. TaskNode Tests
+
+final class TaskNodeTests: XCTestCase {
+
+    func testNodeCreation() {
+        let node = TaskNode(abstractState: .taskStarted)
+        XCTAssertEqual(node.abstractState, .taskStarted)
+        XCTAssertEqual(node.label, "task_started")
+        XCTAssertEqual(node.visitCount, 0)
+        XCTAssertEqual(node.confidence, 1.0)
+    }
+
+    func testRecordVisit() {
+        let node = TaskNode(abstractState: .idle)
+        XCTAssertEqual(node.visitCount, 0)
+        node.recordVisit()
+        node.recordVisit()
+        XCTAssertEqual(node.visitCount, 2)
+    }
+
+    func testUpdateConfidence() {
+        let node = TaskNode(abstractState: .idle)
+        node.updateConfidence(0.5)
+        XCTAssertEqual(node.confidence, 0.5, accuracy: 0.01)
+        node.updateConfidence(2.0)
+        XCTAssertEqual(node.confidence, 1.0, accuracy: 0.01, "Should clamp to 1.0")
+        node.updateConfidence(-0.5)
+        XCTAssertEqual(node.confidence, 0.0, accuracy: 0.01, "Should clamp to 0.0")
+    }
+
+    func testStateSignature() {
+        let node = TaskNode(abstractState: .repoLoaded, label: "repo_loaded")
+        XCTAssertEqual(node.stateSignature, "repo_loaded|repo_loaded")
+    }
+}
+
+// MARK: - 28. TaskEdge Tests
+
+final class TaskEdgeTests: XCTestCase {
+
+    func testEdgeCreation() {
+        let edge = TaskEdge(fromNodeID: "A", toNodeID: "B", action: "click")
+        XCTAssertEqual(edge.status, .candidate)
+        XCTAssertEqual(edge.attempts, 0)
+        XCTAssertEqual(edge.successProbability, 0)
+    }
+
+    func testRecordSuccess() {
+        let edge = TaskEdge(fromNodeID: "A", toNodeID: "B", action: "click")
+        edge.recordSuccess(latencyMs: 10, cost: 1.0)
+        XCTAssertEqual(edge.status, .executedSuccess)
+        XCTAssertEqual(edge.successCount, 1)
+        XCTAssertEqual(edge.attempts, 1)
+        XCTAssertEqual(edge.successProbability, 1.0, accuracy: 0.01)
+    }
+
+    func testRecordFailure() {
+        let edge = TaskEdge(fromNodeID: "A", toNodeID: "B", action: "click")
+        edge.recordFailure(latencyMs: 5, cost: 0.5)
+        XCTAssertEqual(edge.status, .executedFailure)
+        XCTAssertEqual(edge.failureCount, 1)
+        XCTAssertEqual(edge.successProbability, 0, accuracy: 0.01)
+    }
+
+    func testSuccessProbabilityMixed() {
+        let edge = TaskEdge(fromNodeID: "A", toNodeID: "B", action: "type")
+        edge.recordSuccess()
+        edge.recordSuccess()
+        edge.recordFailure()
+        XCTAssertEqual(edge.successProbability, 2.0 / 3.0, accuracy: 0.01)
+        XCTAssertEqual(edge.attempts, 3)
+    }
+
+    func testMarkAbandoned() {
+        let edge = TaskEdge(fromNodeID: "A", toNodeID: "B", action: "click")
+        edge.markAbandoned()
+        XCTAssertEqual(edge.status, .abandoned)
+    }
+
+    func testAverageLatencyAndCost() {
+        let edge = TaskEdge(fromNodeID: "A", toNodeID: "B", action: "navigate")
+        edge.recordSuccess(latencyMs: 10, cost: 2.0)
+        edge.recordSuccess(latencyMs: 20, cost: 4.0)
+        XCTAssertEqual(edge.averageLatencyMs, 15.0, accuracy: 0.01)
+        XCTAssertEqual(edge.averageCost, 3.0, accuracy: 0.01)
+    }
+}
+
+// MARK: - 29. TaskGraph Tests
+
+final class TaskGraphTests: XCTestCase {
+
+    func testAddAndMergeNode() {
+        let graph = TaskGraph()
+        let n1 = TaskNode(abstractState: .taskStarted)
+        let added = graph.addOrMergeNode(n1)
+        XCTAssertEqual(graph.nodeCount, 1)
+        XCTAssertEqual(added.visitCount, 1)
+
+        // Adding same signature merges
+        let n2 = TaskNode(abstractState: .taskStarted)
+        let merged = graph.addOrMergeNode(n2)
+        XCTAssertEqual(graph.nodeCount, 1, "Should merge duplicate states")
+        XCTAssertEqual(merged.visitCount, 2)
+    }
+
+    func testSetCurrent() {
+        let graph = TaskGraph()
+        let node = graph.addOrMergeNode(TaskNode(abstractState: .idle))
+        graph.setCurrent(node.id)
+        XCTAssertEqual(graph.currentNodeID, node.id)
+        XCTAssertNotNil(graph.currentNode())
+    }
+
+    func testAddEdge() {
+        let graph = TaskGraph()
+        let from = graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        let to = graph.addOrMergeNode(TaskNode(abstractState: .repoLoaded))
+
+        let edge = graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to.id, action: "load"))
+        XCTAssertEqual(graph.edgeCount, 1)
+        XCTAssertEqual(edge.action, "load")
+    }
+
+    func testOutgoingEdges() {
+        let graph = TaskGraph()
+        let from = graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        let to1 = graph.addOrMergeNode(TaskNode(abstractState: .repoLoaded, label: "repo_loaded"))
+        let to2 = graph.addOrMergeNode(TaskNode(abstractState: .buildRunning, label: "build_running"))
+
+        graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to1.id, action: "load"))
+        graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to2.id, action: "build"))
+
+        let outgoing = graph.outgoingEdges(from: from.id)
+        XCTAssertEqual(outgoing.count, 2)
+    }
+
+    func testRecordExecution() {
+        let graph = TaskGraph()
+        let from = graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        let to = TaskNode(abstractState: .repoLoaded)
+        graph.setCurrent(from.id)
+
+        let edge = graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to.id, action: "load"))
+        let result = graph.recordExecution(edgeID: edge.id, resultNode: to, latencyMs: 5, cost: 1)
+
+        XCTAssertEqual(graph.currentNodeID, result.id, "Should advance current pointer")
+        XCTAssertEqual(edge.successCount, 1)
+    }
+
+    func testRecordFailure() {
+        let graph = TaskGraph()
+        let from = graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        let to = graph.addOrMergeNode(TaskNode(abstractState: .repoLoaded, label: "repo_loaded"))
+        graph.setCurrent(from.id)
+
+        let edge = graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to.id, action: "load"))
+        graph.recordFailure(edgeID: edge.id, latencyMs: 3, cost: 0.5)
+
+        XCTAssertEqual(graph.currentNodeID, from.id, "Should NOT advance on failure")
+        XCTAssertEqual(edge.failureCount, 1)
+        XCTAssertEqual(edge.status, .executedFailure)
+    }
+
+    func testViableEdges() {
+        let graph = TaskGraph()
+        let from = graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        let to1 = graph.addOrMergeNode(TaskNode(abstractState: .repoLoaded, label: "repo_loaded"))
+        let to2 = graph.addOrMergeNode(TaskNode(abstractState: .buildFailed, label: "build_failed"))
+
+        let e1 = graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to1.id, action: "load"))
+        let e2 = graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to2.id, action: "build"))
+        e2.recordFailure()
+
+        let viable = graph.viableEdges(from: from.id)
+        XCTAssertEqual(viable.count, 1)
+        XCTAssertEqual(viable[0].id, e1.id)
+    }
+
+    func testAlternateEdges() {
+        let graph = TaskGraph()
+        let from = graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        let to1 = graph.addOrMergeNode(TaskNode(abstractState: .repoLoaded, label: "repo_loaded"))
+        let to2 = graph.addOrMergeNode(TaskNode(abstractState: .buildRunning, label: "build_running"))
+
+        let e1 = graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to1.id, action: "load"))
+        let e2 = graph.addEdge(TaskEdge(fromNodeID: from.id, toNodeID: to2.id, action: "build"))
+
+        let alts = graph.alternateEdges(from: from.id, excluding: e1.id)
+        XCTAssertEqual(alts.count, 1)
+        XCTAssertEqual(alts[0].id, e2.id)
+    }
+
+    func testReset() {
+        let graph = TaskGraph()
+        graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        graph.addOrMergeNode(TaskNode(abstractState: .idle, label: "idle"))
+        XCTAssertEqual(graph.nodeCount, 2)
+
+        graph.reset()
+        XCTAssertEqual(graph.nodeCount, 0)
+        XCTAssertEqual(graph.edgeCount, 0)
+        XCTAssertNil(graph.currentNodeID)
+    }
+}
+
+// MARK: - 30. TaskGraphStore Tests
+
+final class TaskGraphStoreTests: XCTestCase {
+
+    func testAbstractStateFromContext() {
+        let store = TaskGraphStore()
+
+        XCTAssertEqual(store.abstractState(from: "run tests"), .testsRunning)
+        XCTAssertEqual(store.abstractState(from: "tests passed"), .testsPassed)
+        XCTAssertEqual(store.abstractState(from: "build running"), .buildRunning)
+        XCTAssertEqual(store.abstractState(from: "build failed"), .buildFailed)
+        XCTAssertEqual(store.abstractState(from: "repository loaded"), .repoLoaded)
+        XCTAssertEqual(store.abstractState(from: "apply patch"), .candidatePatchApplied)
+        XCTAssertEqual(store.abstractState(from: "login page"), .loginPageDetected)
+        XCTAssertEqual(store.abstractState(from: "navigate to settings"), .navigationCompleted)
+        XCTAssertEqual(store.abstractState(from: "explore options"), .explorationActive)
+        XCTAssertEqual(store.abstractState(from: "recovery needed"), .recoveryNeeded)
+        XCTAssertEqual(store.abstractState(from: "unknown context"), .taskStarted)
+    }
+
+    func testUpdateCurrentNode() {
+        let store = TaskGraphStore()
+        let node = store.updateCurrentNode(context: "tests running")
+        XCTAssertEqual(node.abstractState, .testsRunning)
+        XCTAssertNotNil(store.currentNode())
+        XCTAssertEqual(store.currentNode()?.abstractState, .testsRunning)
+    }
+
+    func testAddCandidateEdge() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+
+        let edge = store.addCandidateEdge(
+            action: "run_build",
+            domain: .code,
+            targetState: .buildRunning
+        )
+        XCTAssertNotNil(edge)
+        XCTAssertEqual(edge?.status, .candidate)
+        XCTAssertEqual(edge?.action, "run_build")
+    }
+
+    func testRecordVerifiedExecution() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+
+        let edge = store.addCandidateEdge(
+            action: "load_repo",
+            targetState: .repoLoaded
+        )!
+
+        let resultNode = store.recordVerifiedExecution(
+            edgeID: edge.id,
+            resultContext: "repository loaded",
+            latencyMs: 10,
+            cost: 1.0,
+            createdByAction: "load_repo"
+        )
+
+        XCTAssertEqual(resultNode.abstractState, .repoLoaded)
+        XCTAssertEqual(store.currentNode()?.abstractState, .repoLoaded)
+        XCTAssertEqual(edge.successCount, 1)
+    }
+
+    func testRecordFailedExecution() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+
+        let edge = store.addCandidateEdge(
+            action: "build",
+            targetState: .buildSucceeded
+        )!
+
+        store.recordFailedExecution(edgeID: edge.id, latencyMs: 5, cost: 0.5)
+        XCTAssertEqual(edge.failureCount, 1)
+        XCTAssertEqual(edge.status, .executedFailure)
+        // Current node should NOT advance
+        XCTAssertEqual(store.currentNode()?.abstractState, .taskStarted)
+    }
+
+    func testRecoveryEdges() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+
+        let e1 = store.addCandidateEdge(action: "route_a", targetState: .repoLoaded)!
+        let e2 = store.addCandidateEdge(action: "route_b", targetState: .buildRunning)!
+
+        let recovery = store.recoveryEdges(excludingEdgeID: e1.id)
+        XCTAssertEqual(recovery.count, 1)
+        XCTAssertEqual(recovery[0].id, e2.id)
+    }
+
+    func testViableNextEdges() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+
+        let e1 = store.addCandidateEdge(action: "good", targetState: .repoLoaded)!
+        let e2 = store.addCandidateEdge(action: "bad", targetState: .buildFailed)!
+        e1.recordSuccess()
+        e2.recordFailure()
+
+        let viable = store.viableNextEdges()
+        XCTAssertEqual(viable.count, 1)
+        XCTAssertEqual(viable[0].id, e1.id)
+    }
+
+    func testExportDOT() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+        store.addCandidateEdge(action: "load", targetState: .repoLoaded)
+
+        let dot = store.exportDOT()
+        XCTAssertTrue(dot.contains("digraph TaskGraph"))
+        XCTAssertTrue(dot.contains("load"))
+    }
+
+    func testExportJSON() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+
+        let json = store.exportJSON()
+        let nodes = json["nodes"] as? [[String: Any]]
+        XCTAssertNotNil(nodes)
+        XCTAssertFalse(nodes!.isEmpty)
+    }
+
+    func testSummary() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "idle")
+        let summary = store.summary()
+        XCTAssertTrue(summary.contains("Nodes:"))
+        XCTAssertTrue(summary.contains("Current:"))
+    }
+
+    func testReset() {
+        let store = TaskGraphStore()
+        store.updateCurrentNode(context: "task started")
+        store.addCandidateEdge(action: "load", targetState: .repoLoaded)
+        XCTAssertGreaterThan(store.graph.nodeCount, 0)
+
+        store.reset()
+        XCTAssertEqual(store.graph.nodeCount, 0)
+        XCTAssertEqual(store.graph.edgeCount, 0)
+    }
+}
+
+// MARK: - 31. PlanningGraph + TaskGraph Integration Tests
+
+final class PlanningTaskGraphIntegrationTests: XCTestCase {
+
+    func testRuntimeHasTaskGraphAndPlanningGraph() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.taskGraph)
+        XCTAssertNotNil(runtime.planningGraphEngine)
+        // Task graph should have initial idle node
+        XCTAssertNotNil(runtime.taskGraph.currentNode())
+    }
+
+    func testRuntimeProcessUpdatesTaskGraph() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        let goal = Goal(description: "read file test")
+        runtime.process(goal: goal)
+
+        // After processing, task graph should have edges
+        XCTAssertGreaterThan(runtime.taskGraph.graph.edgeCount, 0,
+                             "Processing should create task graph edges")
+    }
+
+    func testRuntimeProcessUpdatesPlanningGraph() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        let goal = Goal(description: "read file test")
+        runtime.process(goal: goal)
+
+        // After processing, planning graph should have edges
+        XCTAssertGreaterThan(runtime.planningGraphEngine.edgeCount, 0,
+                             "Processing should create planning graph edges")
+    }
+
+    func testPlanningGraphValidActionsAfterProcess() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        let goal = Goal(description: "log something")
+        runtime.process(goal: goal)
+
+        // The planning graph should have at least one edge
+        let allEdges = runtime.planningGraphEngine.allEdges
+        XCTAssertFalse(allEdges.isEmpty, "Should have recorded at least one edge")
+    }
+}

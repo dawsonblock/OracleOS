@@ -45,6 +45,14 @@ public final class OracleRuntime {
     public let stateMemory = StateMemoryIndex()
     public let metrics = MetricsRecorder()
 
+    // ── Task Graph (live planning substrate) ────────────
+
+    public let taskGraph = TaskGraphStore()
+
+    // ── Planning Graph (finite action graph) ────────────
+
+    public let planningGraphEngine = PlanningGraphEngine()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -75,7 +83,10 @@ public final class OracleRuntime {
         // 3. Register built-in actions
         ActionRegistry.shared.registerDefaults()
 
-        // 4. Diagnostics baseline
+        // 4. Task graph initial position
+        taskGraph.updateCurrentNode(context: "idle")
+
+        // 5. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()
@@ -175,6 +186,57 @@ public final class OracleRuntime {
             // ── Record metrics ───────────────────────────
             metrics.recordAction(type: action.type, success: finalResult.success)
             metrics.recordLatency(latencyMs)
+
+            // ── Update task graph ──────────────────────
+            let candidateEdge = taskGraph.addCandidateEdge(
+                action: action.type,
+                domain: action.domain,
+                targetState: taskGraph.abstractState(from: finalResult.detail)
+            )
+            if let edge = candidateEdge {
+                if finalResult.success {
+                    taskGraph.recordVerifiedExecution(
+                        edgeID: edge.id,
+                        resultContext: finalResult.detail,
+                        latencyMs: latencyMs,
+                        cost: 1.0,
+                        createdByAction: action.type
+                    )
+                } else {
+                    taskGraph.recordFailedExecution(
+                        edgeID: edge.id,
+                        latencyMs: latencyMs,
+                        cost: 1.0
+                    )
+                }
+            }
+
+            // ── Update planning graph with critic verdict ─
+            if let edge = planningGraphEngine.findEdge(
+                from: stateSignature.hash,
+                to: finalResult.postStateHash,
+                actionType: action.type
+            ) {
+                planningGraphEngine.recordTraversal(
+                    edgeID: edge.id,
+                    success: finalResult.success,
+                    cost: 1.0,
+                    latencyMs: latencyMs
+                )
+            } else {
+                let newEdge = planningGraphEngine.addEdge(
+                    from: stateSignature.hash,
+                    to: finalResult.postStateHash,
+                    actionType: action.type,
+                    domain: action.domain
+                )
+                planningGraphEngine.recordTraversal(
+                    edgeID: newEdge.id,
+                    success: finalResult.success,
+                    cost: 1.0,
+                    latencyMs: latencyMs
+                )
+            }
 
             // ── Update state memory ──────────────────────
             stateMemory.record(
