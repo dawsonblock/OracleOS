@@ -53,6 +53,14 @@ public final class OracleRuntime {
 
     public let planningGraphEngine = PlanningGraphEngine()
 
+    // ── World State pipeline ────────────────────────────
+
+    public let worldModel = WorldStateModel()
+    public let schemaLibrary = ActionSchemaLibrary()
+
+    // previousObservation tracks the last observation for delta detection
+    private var previousObservation: Observation?
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -397,5 +405,65 @@ public final class OracleRuntime {
             return .abort(reason: "goal recovery budget exhausted")
         }
         return nil
+    }
+
+    // ── Observation intake ──────────────────────────────
+    //
+    // Called each loop iteration to feed a fresh observation
+    // through the perception pipeline:
+    //   observation → delta → diff → world model update
+    //
+    // The compressed UI state is returned for optional use
+    // in plan generation or prompt construction.
+
+    @discardableResult
+    public func ingestObservation(_ observation: Observation) -> CompressedUIState {
+
+        // 1. Delta detection
+        let delta: ObservationDelta
+        if let prev = previousObservation {
+            delta = ObservationChangeDetector.detect(previous: prev, incoming: observation)
+        } else {
+            // First observation — treat everything as new
+            delta = ObservationDelta(
+                applicationChanged: observation.app.map {
+                    .init(from: nil, to: $0)
+                },
+                addedElements: observation.elements
+            )
+        }
+
+        // 2. Produce StateDiff (uses delta when available)
+        let diff: StateDiff
+        if previousObservation != nil {
+            diff = StateDiffEngine.diff(
+                current: worldModel.snapshot,
+                incoming: observation,
+                delta: delta
+            )
+        } else {
+            diff = StateDiffEngine.diff(
+                current: worldModel.snapshot,
+                incoming: observation
+            )
+        }
+
+        // 3. Apply to world model
+        if !diff.isEmpty {
+            worldModel.apply(diff: diff)
+        }
+
+        // 4. Compress for planning
+        let compressed = StateAbstractionEngine.compress(observation: observation)
+
+        // 5. Stash for next delta
+        previousObservation = observation
+
+        return compressed
+    }
+
+    /// Current world snapshot for external consumers.
+    public var currentWorldSnapshot: WorldModelSnapshot {
+        worldModel.snapshot
     }
 }

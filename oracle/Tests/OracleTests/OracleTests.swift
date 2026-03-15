@@ -1613,3 +1613,583 @@ final class PlanningTaskGraphIntegrationTests: XCTestCase {
         XCTAssertFalse(allEdges.isEmpty, "Should have recorded at least one edge")
     }
 }
+
+// MARK: - 32. Observation + UnifiedElement Tests
+
+final class ObservationTests: XCTestCase {
+
+    func testObservationStableHash() {
+        let obs1 = Observation(
+            app: "Xcode",
+            windowTitle: "Main.swift",
+            elements: [
+                UnifiedElement(id: "btn1", source: .accessibility, role: "button", label: "Build")
+            ]
+        )
+        let obs2 = Observation(
+            app: "Xcode",
+            windowTitle: "Main.swift",
+            elements: [
+                UnifiedElement(id: "btn1", source: .accessibility, role: "button", label: "Build")
+            ]
+        )
+        XCTAssertEqual(obs1.stableHash(), obs2.stableHash(),
+                        "Same content should produce the same hash")
+    }
+
+    func testObservationFocusedElement() {
+        let obs = Observation(
+            app: "Safari",
+            focusedElementID: "search",
+            elements: [
+                UnifiedElement(id: "search", role: "textfield", label: "URL bar", focused: true),
+                UnifiedElement(id: "btn", role: "button", label: "Go")
+            ]
+        )
+        XCTAssertNotNil(obs.focusedElement)
+        XCTAssertEqual(obs.focusedElement?.id, "search")
+    }
+
+    func testUnifiedElementDefaults() {
+        let elem = UnifiedElement(id: "x")
+        XCTAssertEqual(elem.source, .synthetic)
+        XCTAssertTrue(elem.enabled)
+        XCTAssertTrue(elem.visible)
+        XCTAssertFalse(elem.focused)
+        XCTAssertEqual(elem.confidence, 1.0)
+    }
+
+    func testObservationDeltaIsEmpty() {
+        let delta = ObservationDelta()
+        XCTAssertTrue(delta.isEmpty)
+        XCTAssertEqual(delta.changeCount, 0)
+    }
+
+    func testObservationDeltaChangeCount() {
+        let delta = ObservationDelta(
+            applicationChanged: .init(from: "A", to: "B"),
+            addedElements: [UnifiedElement(id: "new")],
+            removedElementIDs: ["old"]
+        )
+        XCTAssertFalse(delta.isEmpty)
+        XCTAssertEqual(delta.changeCount, 3) // 1 app + 1 added + 1 removed
+    }
+}
+
+// MARK: - 33. ObservationChangeDetector Tests
+
+final class ObservationChangeDetectorTests: XCTestCase {
+
+    func testIdenticalObservationsProduceEmptyDelta() {
+        let obs = Observation(
+            app: "Xcode",
+            elements: [UnifiedElement(id: "a", role: "button", label: "OK")]
+        )
+        let delta = ObservationChangeDetector.detect(previous: obs, incoming: obs)
+        XCTAssertTrue(delta.isEmpty, "Identical observations should have no changes")
+    }
+
+    func testDetectsAddedElements() {
+        let prev = Observation(app: "Xcode", elements: [
+            UnifiedElement(id: "a", role: "button")
+        ])
+        let next = Observation(app: "Xcode", elements: [
+            UnifiedElement(id: "a", role: "button"),
+            UnifiedElement(id: "b", role: "text")
+        ])
+        let delta = ObservationChangeDetector.detect(previous: prev, incoming: next)
+        XCTAssertEqual(delta.addedElements.count, 1)
+        XCTAssertEqual(delta.addedElements.first?.id, "b")
+    }
+
+    func testDetectsRemovedElements() {
+        let prev = Observation(app: "Xcode", elements: [
+            UnifiedElement(id: "a"),
+            UnifiedElement(id: "b")
+        ])
+        let next = Observation(app: "Xcode", elements: [
+            UnifiedElement(id: "a")
+        ])
+        let delta = ObservationChangeDetector.detect(previous: prev, incoming: next)
+        XCTAssertEqual(delta.removedElementIDs.count, 1)
+        XCTAssertTrue(delta.removedElementIDs.contains("b"))
+    }
+
+    func testDetectsPropertyChanges() {
+        let prev = Observation(elements: [
+            UnifiedElement(id: "x", role: "button", label: "Save", enabled: true)
+        ])
+        let next = Observation(elements: [
+            UnifiedElement(id: "x", role: "button", label: "Save", enabled: false)
+        ])
+        let delta = ObservationChangeDetector.detect(previous: prev, incoming: next)
+        XCTAssertEqual(delta.changedElements.count, 1)
+        XCTAssertTrue(delta.changedElements.first!.changedProperties.contains(.enabled))
+    }
+
+    func testDetectsApplicationChange() {
+        let prev = Observation(app: "Xcode")
+        let next = Observation(app: "Safari")
+        let delta = ObservationChangeDetector.detect(previous: prev, incoming: next)
+        XCTAssertNotNil(delta.applicationChanged)
+        XCTAssertEqual(delta.applicationChanged?.from, "Xcode")
+        XCTAssertEqual(delta.applicationChanged?.to, "Safari")
+    }
+
+    func testVolatilePropertyFiltering() {
+        let old = UnifiedElement(id: "x", role: "button", confidence: 0.9)
+        let new = UnifiedElement(id: "x", role: "button", confidence: 0.95)
+        let all = ObservationChangeDetector.diffProperties(old: old, new: new)
+        XCTAssertTrue(all.contains(.confidence))
+        let planning = ObservationChangeDetector.diffPlanningProperties(old: old, new: new)
+        XCTAssertFalse(planning.contains(.confidence), "Confidence is volatile")
+    }
+
+    func testDetectsURLChange() {
+        let prev = Observation(url: "https://example.com")
+        let next = Observation(url: "https://other.com")
+        let delta = ObservationChangeDetector.detect(previous: prev, incoming: next)
+        XCTAssertNotNil(delta.urlChanged)
+    }
+}
+
+// MARK: - 34. WorldStateModel Tests
+
+final class WorldStateModelTests: XCTestCase {
+
+    func testInitialSnapshotIsBlank() {
+        let model = WorldStateModel()
+        XCTAssertNil(model.snapshot.activeApplication)
+        XCTAssertNil(model.snapshot.activeBranch)
+        XCTAssertTrue(model.snapshot.buildSucceeded)
+        XCTAssertEqual(model.snapshot.failingTestCount, 0)
+    }
+
+    func testApplyDiffUpdatesSnapshot() {
+        let model = WorldStateModel()
+        let diff = StateDiff(changes: [
+            .applicationChanged(from: nil, to: "Xcode"),
+            .branchChanged(from: nil, to: "main"),
+            .elementCountChanged(from: 0, to: 42)
+        ])
+        model.apply(diff: diff)
+        XCTAssertEqual(model.snapshot.activeApplication, "Xcode")
+        XCTAssertEqual(model.snapshot.activeBranch, "main")
+        XCTAssertEqual(model.snapshot.visibleElementCount, 42)
+    }
+
+    func testHistoryTracking() {
+        let model = WorldStateModel(maxHistory: 3)
+        // Apply 4 diffs to exceed maxHistory
+        for i in 0..<4 {
+            model.apply(diff: StateDiff(changes: [
+                .elementCountChanged(from: i, to: i + 1)
+            ]))
+        }
+        XCTAssertLessThanOrEqual(model.historyCount, 3,
+                                  "History should be bounded")
+    }
+
+    func testApplyObservationDirectly() {
+        let model = WorldStateModel()
+        let obs = Observation(
+            app: "Safari",
+            windowTitle: "Google",
+            url: "https://google.com",
+            elements: [UnifiedElement(id: "a"), UnifiedElement(id: "b")]
+        )
+        model.applyObservation(obs)
+        XCTAssertEqual(model.snapshot.activeApplication, "Safari")
+        XCTAssertEqual(model.snapshot.url, "https://google.com")
+        XCTAssertEqual(model.snapshot.visibleElementCount, 2)
+    }
+
+    func testResetClearsSnapshot() {
+        let model = WorldStateModel()
+        model.apply(diff: StateDiff(changes: [
+            .applicationChanged(from: nil, to: "Xcode")
+        ]))
+        model.reset()
+        XCTAssertNil(model.snapshot.activeApplication)
+    }
+
+    func testRecentHistory() {
+        let model = WorldStateModel()
+        model.apply(diff: StateDiff(changes: [.applicationChanged(from: nil, to: "A")]))
+        model.apply(diff: StateDiff(changes: [.applicationChanged(from: "A", to: "B")]))
+
+        let history = model.recentHistory(limit: 5)
+        XCTAssertFalse(history.isEmpty)
+    }
+
+    func testSnapshotSummary() {
+        let snap = WorldModelSnapshot(
+            activeApplication: "Xcode",
+            visibleElementCount: 10,
+            activeBranch: "main",
+            buildSucceeded: true
+        )
+        let summary = snap.summary
+        XCTAssertTrue(summary.contains("Xcode"))
+        XCTAssertTrue(summary.contains("main"))
+    }
+}
+
+// MARK: - 35. StateDiffEngine Tests
+
+final class StateDiffEngineTests: XCTestCase {
+
+    func testDiffDetectsApplicationChange() {
+        let snap = WorldModelSnapshot(activeApplication: "Xcode")
+        let obs = Observation(app: "Safari")
+        let diff = StateDiffEngine.diff(current: snap, incoming: obs)
+        XCTAssertFalse(diff.isEmpty)
+        let apps = diff.changes.filter {
+            if case .applicationChanged = $0 { return true }
+            return false
+        }
+        XCTAssertEqual(apps.count, 1)
+    }
+
+    func testDiffIdenticalStateIsEmpty() {
+        let snap = WorldModelSnapshot(activeApplication: "Xcode", url: "https://x.com", visibleElementCount: 0)
+        let obs = Observation(app: "Xcode", url: "https://x.com", elements: [])
+        let diff = StateDiffEngine.diff(current: snap, incoming: obs)
+        // Only observationHash may differ since snap.observationHash is nil
+        let nonHash = diff.changes.filter {
+            if case .observationHashChanged = $0 { return false }
+            return true
+        }
+        XCTAssertTrue(nonHash.isEmpty, "Only hash should differ for matching state")
+    }
+
+    func testDiffWithDeltaUsesElementDelta() {
+        let snap = WorldModelSnapshot(visibleElementCount: 5)
+        let obs = Observation(elements: [
+            UnifiedElement(id: "a"), UnifiedElement(id: "b"),
+            UnifiedElement(id: "c"), UnifiedElement(id: "d"),
+            UnifiedElement(id: "e"), UnifiedElement(id: "f"),
+            UnifiedElement(id: "g")
+        ])
+        let delta = ObservationDelta(
+            addedElements: [UnifiedElement(id: "f"), UnifiedElement(id: "g")]
+        )
+        let diff = StateDiffEngine.diff(current: snap, incoming: obs, delta: delta)
+        let elementChanges = diff.changes.filter {
+            if case .elementCountChanged = $0 { return true }
+            return false
+        }
+        XCTAssertEqual(elementChanges.count, 1)
+    }
+
+    func testDiffBetweenSnapshots() {
+        let prev = WorldModelSnapshot(
+            activeApplication: "Xcode",
+            activeBranch: "main",
+            isGitDirty: false,
+            buildSucceeded: true
+        )
+        let cur = WorldModelSnapshot(
+            activeApplication: "Xcode",
+            activeBranch: "feature",
+            isGitDirty: true,
+            buildSucceeded: false,
+            failingTestCount: 3
+        )
+        let diff = StateDiffEngine.diff(previous: prev, current: cur)
+        XCTAssertFalse(diff.isEmpty)
+        // Should detect branch, git dirty, build result, failing tests
+        XCTAssertGreaterThanOrEqual(diff.count, 4)
+    }
+
+    func testDiffChangesAreEquatable() {
+        let a = StateDiff.Change.applicationChanged(from: "X", to: "Y")
+        let b = StateDiff.Change.applicationChanged(from: "X", to: "Y")
+        XCTAssertEqual(a, b)
+    }
+}
+
+// MARK: - 36. StateAbstractionEngine Tests
+
+final class StateAbstractionEngineTests: XCTestCase {
+
+    func testMapRoleButton() {
+        XCTAssertEqual(StateAbstractionEngine.mapRole("button"), .button)
+        XCTAssertEqual(StateAbstractionEngine.mapRole("AXButton"), .button)
+    }
+
+    func testMapRoleInput() {
+        XCTAssertEqual(StateAbstractionEngine.mapRole("textfield"), .input)
+        XCTAssertEqual(StateAbstractionEngine.mapRole("textarea"), .input)
+        XCTAssertEqual(StateAbstractionEngine.mapRole("searchfield"), .input)
+    }
+
+    func testMapRoleUnknown() {
+        XCTAssertEqual(StateAbstractionEngine.mapRole(nil), .unknown)
+        XCTAssertEqual(StateAbstractionEngine.mapRole("xyz"), .unknown)
+    }
+
+    func testClassifyInteractable() {
+        XCTAssertTrue(StateAbstractionEngine.classify(.button))
+        XCTAssertTrue(StateAbstractionEngine.classify(.input))
+        XCTAssertTrue(StateAbstractionEngine.classify(.link))
+        XCTAssertFalse(StateAbstractionEngine.classify(.text))
+        XCTAssertFalse(StateAbstractionEngine.classify(.image))
+        XCTAssertFalse(StateAbstractionEngine.classify(.container))
+    }
+
+    func testCompressObservation() {
+        let obs = Observation(elements: [
+            UnifiedElement(id: "b1", role: "button", label: "OK", visible: true, focused: false),
+            UnifiedElement(id: "t1", role: "statictext", label: "Hello", visible: true),
+            UnifiedElement(id: "i1", role: "textfield", label: "Name", visible: true),
+            UnifiedElement(id: "h1", role: "button", label: "Hidden", visible: false)
+        ])
+        let compressed = StateAbstractionEngine.compress(observation: obs)
+        // Hidden element should be filtered out
+        XCTAssertEqual(compressed.totalCount, 3)
+        XCTAssertEqual(compressed.interactableCount, 2) // button + input
+    }
+
+    func testCompressedUIStateSummary() {
+        let compressed = CompressedUIState(elements: [
+            SemanticElement(id: "a", kind: .button, label: "OK", interactable: true),
+            SemanticElement(id: "b", kind: .button, label: "Cancel", interactable: true)
+        ])
+        XCTAssertTrue(compressed.summary.contains("2 elements"))
+        XCTAssertTrue(compressed.summary.contains("2 interactable"))
+        XCTAssertEqual(compressed.dominantKind, .button)
+    }
+
+    func testCompressedUIStateFingerprint() {
+        let state1 = CompressedUIState(elements: [
+            SemanticElement(id: "a", kind: .button, label: "OK", interactable: true)
+        ])
+        let state2 = CompressedUIState(elements: [
+            SemanticElement(id: "a", kind: .button, label: "OK", interactable: true)
+        ])
+        XCTAssertEqual(state1.fingerprint(), state2.fingerprint())
+    }
+
+    func testInteractableElements() {
+        let obs = Observation(elements: [
+            UnifiedElement(id: "b", role: "button", label: "Go", enabled: true, visible: true),
+            UnifiedElement(id: "t", role: "statictext", label: "Label", visible: true),
+            UnifiedElement(id: "d", role: "button", label: "Disabled", enabled: false, visible: true)
+        ])
+        let interactable = StateAbstractionEngine.interactableElements(from: obs)
+        // Only enabled button counts as interactable
+        XCTAssertEqual(interactable.count, 1)
+        XCTAssertEqual(interactable.first?.id, "b")
+    }
+}
+
+// MARK: - 37. ActionSchema Tests
+
+final class ActionSchemaTests: XCTestCase {
+
+    func testSchemaConditionEvaluateAppFrontmost() {
+        let snap = WorldModelSnapshot(activeApplication: "Xcode")
+        XCTAssertTrue(SchemaCondition.appFrontmost(name: "Xcode").evaluate(against: snap))
+        XCTAssertFalse(SchemaCondition.appFrontmost(name: "Safari").evaluate(against: snap))
+    }
+
+    func testSchemaConditionBuildSucceeded() {
+        let snap = WorldModelSnapshot(buildSucceeded: true)
+        XCTAssertTrue(SchemaCondition.buildSucceeded.evaluate(against: snap))
+        let failSnap = WorldModelSnapshot(buildSucceeded: false)
+        XCTAssertFalse(SchemaCondition.buildSucceeded.evaluate(against: failSnap))
+    }
+
+    func testSchemaConditionGitClean() {
+        let clean = WorldModelSnapshot(isGitDirty: false)
+        XCTAssertTrue(SchemaCondition.gitClean.evaluate(against: clean))
+        let dirty = WorldModelSnapshot(isGitDirty: true)
+        XCTAssertFalse(SchemaCondition.gitClean.evaluate(against: dirty))
+    }
+
+    func testSchemaConditionURLContains() {
+        let snap = WorldModelSnapshot(url: "https://github.com/repo")
+        XCTAssertTrue(SchemaCondition.urlContains(substring: "github").evaluate(against: snap))
+        XCTAssertFalse(SchemaCondition.urlContains(substring: "gitlab").evaluate(against: snap))
+    }
+
+    func testSchemaPreconditionsMet() {
+        let schema = ActionSchema(
+            kind: .runTests,
+            domain: .code,
+            name: "runTests",
+            preconditions: [.buildSucceeded, .noFailingTests]
+        )
+        let good = WorldModelSnapshot(buildSucceeded: true, failingTestCount: 0)
+        XCTAssertTrue(schema.preconditionsMet(snapshot: good))
+
+        let bad = WorldModelSnapshot(buildSucceeded: false, failingTestCount: 2)
+        XCTAssertFalse(schema.preconditionsMet(snapshot: bad))
+    }
+
+    func testActionSchemaLibraryDefaults() {
+        let lib = ActionSchemaLibrary()
+        XCTAssertGreaterThanOrEqual(lib.count, 10, "Should have default schemas")
+        XCTAssertNotNil(lib.schema(for: .click))
+        XCTAssertNotNil(lib.schema(for: .buildProject))
+        XCTAssertNotNil(lib.schema(for: .runTests))
+        XCTAssertNotNil(lib.schema(for: .gitCheckout))
+    }
+
+    func testApplicableSchemas() {
+        let lib = ActionSchemaLibrary()
+        let snap = WorldModelSnapshot(buildSucceeded: true, failingTestCount: 0)
+        let applicable = lib.applicableSchemas(given: snap)
+        XCTAssertFalse(applicable.isEmpty)
+    }
+
+    func testCustomSchemaRegistration() {
+        let lib = ActionSchemaLibrary()
+        let custom = ActionSchema(
+            kind: .custom,
+            domain: .tool,
+            name: "deployStaging",
+            description: "Deploy to staging",
+            preconditions: [.buildSucceeded, .noFailingTests]
+        )
+        lib.register(custom)
+        XCTAssertNotNil(lib.customSchema(named: "deployStaging"))
+    }
+
+    func testSchemaConditionNoFailingTests() {
+        let good = WorldModelSnapshot(failingTestCount: 0)
+        XCTAssertTrue(SchemaCondition.noFailingTests.evaluate(against: good))
+        let bad = WorldModelSnapshot(failingTestCount: 5)
+        XCTAssertFalse(SchemaCondition.noFailingTests.evaluate(against: bad))
+    }
+}
+
+// MARK: - 38. World State Pipeline Integration Tests
+
+final class WorldStatePipelineIntegrationTests: XCTestCase {
+
+    func testFullPipelineObservationToWorldModel() {
+        // Simulate the full pipeline:
+        // Observation -> ChangeDetector -> StateDiffEngine -> WorldStateModel
+        let model = WorldStateModel()
+
+        let obs1 = Observation(
+            app: "Xcode",
+            windowTitle: "Main.swift",
+            url: nil,
+            elements: [
+                UnifiedElement(id: "btn1", role: "button", label: "Build"),
+                UnifiedElement(id: "txt1", role: "statictext", label: "Ready")
+            ]
+        )
+
+        // First: apply directly (no previous)
+        let diff1 = StateDiffEngine.diff(current: model.snapshot, incoming: obs1)
+        model.apply(diff: diff1)
+        XCTAssertEqual(model.snapshot.activeApplication, "Xcode")
+        XCTAssertEqual(model.snapshot.visibleElementCount, 2)
+
+        // Second observation: app switch
+        let obs2 = Observation(
+            app: "Safari",
+            windowTitle: "Google",
+            url: "https://google.com",
+            elements: [
+                UnifiedElement(id: "search", role: "textfield", label: "Search"),
+                UnifiedElement(id: "btn", role: "button", label: "Search"),
+                UnifiedElement(id: "link1", role: "link", label: "Result 1")
+            ]
+        )
+
+        // Use change detector for delta
+        let delta = ObservationChangeDetector.detect(previous: obs1, incoming: obs2)
+        XCTAssertNotNil(delta.applicationChanged)
+
+        let diff2 = StateDiffEngine.diff(current: model.snapshot, incoming: obs2, delta: delta)
+        model.apply(diff: diff2)
+        XCTAssertEqual(model.snapshot.activeApplication, "Safari")
+        XCTAssertEqual(model.snapshot.url, "https://google.com")
+        XCTAssertEqual(model.snapshot.visibleElementCount, 3) // 2 + (3 added - 2 removed) = 3
+
+        // Verify history
+        XCTAssertGreaterThanOrEqual(model.historyCount, 1)
+    }
+
+    func testRuntimeIngestObservation() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        let obs = Observation(
+            app: "Terminal",
+            windowTitle: "bash",
+            elements: [
+                UnifiedElement(id: "prompt", role: "textfield", label: "$ ", visible: true)
+            ]
+        )
+
+        let compressed = runtime.ingestObservation(obs)
+        XCTAssertEqual(compressed.totalCount, 1)
+        XCTAssertEqual(runtime.currentWorldSnapshot.activeApplication, "Terminal")
+    }
+
+    func testRuntimeIngestTwoObservations() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        let obs1 = Observation(app: "Xcode", elements: [
+            UnifiedElement(id: "a", role: "button", label: "Build", visible: true)
+        ])
+        runtime.ingestObservation(obs1)
+        XCTAssertEqual(runtime.currentWorldSnapshot.activeApplication, "Xcode")
+
+        let obs2 = Observation(app: "Safari", elements: [
+            UnifiedElement(id: "b", role: "link", label: "Google", visible: true)
+        ])
+        runtime.ingestObservation(obs2)
+        XCTAssertEqual(runtime.currentWorldSnapshot.activeApplication, "Safari")
+    }
+
+    func testAbstractionPipelineEndToEnd() {
+        let obs = Observation(elements: [
+            UnifiedElement(id: "b1", role: "button", label: "OK", enabled: true, visible: true),
+            UnifiedElement(id: "b2", role: "button", label: "Cancel", enabled: true, visible: true),
+            UnifiedElement(id: "t1", role: "textfield", label: "Name", enabled: true, visible: true),
+            UnifiedElement(id: "s1", role: "statictext", label: "Enter name", visible: true),
+            UnifiedElement(id: "h1", role: "button", label: "Hidden", visible: false)
+        ])
+
+        let compressed = StateAbstractionEngine.compress(observation: obs)
+        XCTAssertEqual(compressed.totalCount, 4, "Hidden element should be excluded")
+        XCTAssertEqual(compressed.interactableCount, 3, "2 buttons + 1 input")
+        XCTAssertNotNil(compressed.dominantKind)
+    }
+
+    func testSchemaApplicabilityWithWorldModel() {
+        let model = WorldStateModel()
+        model.apply(diff: StateDiff(changes: [
+            .applicationChanged(from: nil, to: "Xcode"),
+            .buildResultChanged(from: true, to: true),
+        ]))
+
+        let lib = ActionSchemaLibrary()
+        let applicable = lib.applicableSchemas(given: model.snapshot)
+        XCTAssertFalse(applicable.isEmpty)
+
+        // runTests requires buildSucceeded
+        let runTests = applicable.first { $0.kind == .runTests }
+        XCTAssertNotNil(runTests, "runTests should be applicable when build succeeds")
+    }
+
+    func testSchemaApplicabilityBlocksOnPrecondition() {
+        let model = WorldStateModel()
+        model.apply(diff: StateDiff(changes: [
+            .buildResultChanged(from: true, to: false)
+        ]))
+
+        let lib = ActionSchemaLibrary()
+        let runTests = lib.schema(for: .runTests)!
+        XCTAssertFalse(runTests.preconditionsMet(snapshot: model.snapshot),
+                        "runTests should be blocked when build failed")
+    }
+}
