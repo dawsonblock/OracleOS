@@ -98,6 +98,9 @@ public final class OracleRuntime {
         stateMemory: stateMemory
     )
 
+    /// The integrated agent control loop — ties all coordinators together.
+    public private(set) lazy var agentLoop: AgentLoop = AgentLoop(runtime: self)
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -142,6 +145,7 @@ public final class OracleRuntime {
         _ = decisionCoordinator
         _ = executionCoordinator
         _ = learningCoordinator
+        _ = agentLoop
 
         // 8. Diagnostics baseline
         diagnostics.attachMetrics(metrics)

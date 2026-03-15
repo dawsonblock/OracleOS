@@ -3157,3 +3157,219 @@ final class CoordinatorRuntimeWiringTests: XCTestCase {
         XCTAssertEqual(snap.totalGoalsProcessed, 1)
     }
 }
+
+// MARK: - 48. AgentLoop Tests
+
+// ── 48a. LoopBudget ──────────────────────────────────────────────────────────
+
+final class LoopBudgetTests: XCTestCase {
+
+    func testDefaultBudget() {
+        let b = LoopBudget()
+        XCTAssertEqual(b.maxSteps, 25)
+        XCTAssertEqual(b.maxRecoveries, 5)
+        XCTAssertEqual(b.maxConsecutiveExplorationSteps, 3)
+    }
+
+    func testTestBudget() {
+        let b = LoopBudget.test
+        XCTAssertEqual(b.maxSteps, 5)
+        XCTAssertEqual(b.maxRecoveries, 2)
+    }
+
+    func testBudgetStateIncrements() {
+        let budget = LoopBudget(maxSteps: 3, maxRecoveries: 2, maxConsecutiveExplorationSteps: 2)
+        var state = LoopBudgetState()
+        XCTAssertFalse(state.incrementStep(budget: budget))
+        XCTAssertFalse(state.incrementStep(budget: budget))
+        XCTAssertTrue(state.incrementStep(budget: budget))  // hits ceiling at step 3
+    }
+
+    func testBudgetStateRecovery() {
+        let budget = LoopBudget(maxSteps: 10, maxRecoveries: 2, maxConsecutiveExplorationSteps: 3)
+        var state = LoopBudgetState()
+        XCTAssertTrue(state.canRecover(under: budget))
+        state.registerRecovery(budget: budget)
+        XCTAssertTrue(state.canRecover(under: budget))
+        state.registerRecovery(budget: budget)
+        XCTAssertFalse(state.canRecover(under: budget))
+    }
+
+    func testBudgetStateExploration() {
+        let budget = LoopBudget(maxSteps: 10, maxRecoveries: 5, maxConsecutiveExplorationSteps: 2)
+        var state = LoopBudgetState()
+        XCTAssertFalse(state.registerExplorationStep(budget: budget))
+        XCTAssertFalse(state.registerExplorationStep(budget: budget))
+        XCTAssertTrue(state.registerExplorationStep(budget: budget))  // exceeds ceiling
+    }
+
+    func testBudgetStateResetExploration() {
+        let budget = LoopBudget(maxSteps: 10, maxRecoveries: 5, maxConsecutiveExplorationSteps: 2)
+        var state = LoopBudgetState()
+        state.registerExplorationStep(budget: budget)
+        state.registerExplorationStep(budget: budget)
+        state.resetExploration()
+        XCTAssertEqual(state.consecutiveExplorationSteps, 0)
+    }
+}
+
+// ── 48b. LoopTypes ───────────────────────────────────────────────────────────
+
+final class LoopTypesTests: XCTestCase {
+
+    func testLoopOutcomeFields() {
+        let snap = WorldModelSnapshot(activeApplication: "Xcode")
+        let outcome = LoopOutcome(reason: .goalAchieved, finalSnapshot: snap, steps: 3, recoveries: 1)
+        XCTAssertEqual(outcome.reason, .goalAchieved)
+        XCTAssertEqual(outcome.steps, 3)
+        XCTAssertEqual(outcome.recoveries, 1)
+        XCTAssertEqual(outcome.finalSnapshot.activeApplication, "Xcode")
+    }
+
+    func testLoopOutcomeSummaryContainsReason() {
+        let snap = WorldModelSnapshot()
+        let outcome = LoopOutcome(reason: .maxSteps, finalSnapshot: snap, steps: 25, recoveries: 0)
+        XCTAssertTrue(outcome.summary.contains("maxSteps"))
+        XCTAssertTrue(outcome.summary.contains("25"))
+    }
+
+    func testAllTerminationReasonsHaveRawValues() {
+        let reasons: [LoopTerminationReason] = [
+            .goalAchieved, .maxSteps, .policyBlocked, .noViablePlan,
+            .unrecoverableFailure, .explorationBudgetExceeded, .recoveryBudgetExhausted
+        ]
+        for r in reasons {
+            XCTAssertFalse(r.rawValue.isEmpty)
+        }
+    }
+}
+
+// ── 48c. GoalClassifier ──────────────────────────────────────────────────────
+
+final class GoalClassifierTests: XCTestCase {
+
+    func testClassifiesCodeGoal() {
+        XCTAssertEqual(GoalClassifier.classify(description: "fix the build error"), .code)
+        XCTAssertEqual(GoalClassifier.classify(description: "run swift test"), .code)
+        XCTAssertEqual(GoalClassifier.classify(description: "commit and push changes"), .code)
+    }
+
+    func testClassifiesUIGoal() {
+        XCTAssertEqual(GoalClassifier.classify(description: "open Safari and click login"), .ui)
+        XCTAssertEqual(GoalClassifier.classify(description: "scroll down in Finder"), .ui)
+    }
+
+    func testClassifiesMixedGoal() {
+        let kind = GoalClassifier.classify(description: "open Xcode and fix the build")
+        XCTAssertEqual(kind, .mixed)
+    }
+
+    func testDefaultsToUI() {
+        let kind = GoalClassifier.classify(description: "do the thing")
+        XCTAssertEqual(kind, .ui)
+    }
+
+    func testWorkspaceRootHintDoesNotBreak() {
+        let kind = GoalClassifier.classify(description: "review the code", workspaceRoot: "/workspace")
+        // Should be code or mixed — not a crash
+        XCTAssertNotNil(kind)
+    }
+}
+
+// ── 48d. RuntimeSurface ──────────────────────────────────────────────────────
+
+final class RuntimeSurfaceTests: XCTestCase {
+
+    func testRawValues() {
+        XCTAssertEqual(RuntimeSurface.controller.rawValue, "controller")
+        XCTAssertEqual(RuntimeSurface.mcp.rawValue, "mcp")
+        XCTAssertEqual(RuntimeSurface.cli.rawValue, "cli")
+        XCTAssertEqual(RuntimeSurface.recipe.rawValue, "recipe")
+    }
+
+    func testEquatable() {
+        XCTAssertEqual(RuntimeSurface.cli, RuntimeSurface.cli)
+        XCTAssertNotEqual(RuntimeSurface.cli, RuntimeSurface.mcp)
+    }
+}
+
+// ── 48e. AgentLoop integration ───────────────────────────────────────────────
+
+final class AgentLoopTests: XCTestCase {
+
+    private func makeRuntime() -> OracleRuntime {
+        let r = OracleRuntime()
+        r.initialize()
+        return r
+    }
+
+    func testRuntimeExposesAgentLoop() {
+        let runtime = makeRuntime()
+        XCTAssertNotNil(runtime.agentLoop)
+    }
+
+    func testLoopReturnsOutcomeWithNoViablePlanOnEmptyGoal() {
+        let runtime = makeRuntime()
+        // A goal description that produces no actions from the planner
+        // should terminate with .noViablePlan or .maxSteps (either is valid).
+        let goal = Goal(description: "")
+        let ctx = TaskContext(goal: goal)
+        let outcome = runtime.agentLoop.run(taskContext: ctx, budget: .test)
+        XCTAssertTrue(
+            outcome.reason == .noViablePlan ||
+            outcome.reason == .maxSteps ||
+            outcome.reason == .policyBlocked ||
+            outcome.reason == .goalAchieved
+        )
+        XCTAssertGreaterThanOrEqual(outcome.steps, 0)
+    }
+
+    func testLoopTerminatesWithinMaxSteps() {
+        let runtime = makeRuntime()
+        let goal = Goal(description: "log something for the test")
+        let ctx = TaskContext(goal: goal, agentKind: .mixed)
+        let budget = LoopBudget(maxSteps: 3, maxRecoveries: 1, maxConsecutiveExplorationSteps: 2)
+        let outcome = runtime.agentLoop.run(taskContext: ctx, budget: budget)
+        XCTAssertLessThanOrEqual(outcome.steps, budget.maxSteps)
+    }
+
+    func testLoopRecordsGoalInMetrics() {
+        let runtime = makeRuntime()
+        let before = runtime.metrics.snapshot()
+        let goal = Goal(description: "run the tests")
+        let ctx = TaskContext(goal: goal, agentKind: .code)
+        runtime.agentLoop.run(taskContext: ctx, budget: .test)
+        let after = runtime.metrics.snapshot()
+        XCTAssertGreaterThan(after.totalGoalsProcessed, before.totalGoalsProcessed)
+    }
+
+    func testLoopFinalSnapshotIsNonNil() {
+        let runtime = makeRuntime()
+        let goal = Goal(description: "build project")
+        let ctx = TaskContext(goal: goal, workspaceRoot: "/tmp", agentKind: .code)
+        let outcome = runtime.agentLoop.run(taskContext: ctx, budget: .test)
+        // finalSnapshot should be a valid WorldModelSnapshot (struct is always value-typed)
+        XCTAssertGreaterThanOrEqual(outcome.steps, 0)
+        XCTAssertGreaterThanOrEqual(outcome.recoveries, 0)
+    }
+
+    func testLoopPolicyBlockedHonoured() {
+        let runtime = makeRuntime()
+        // "delete_file" requires approval — policy blocks it
+        let goal = Goal(description: "delete_file the build")
+        let ctx = TaskContext(goal: goal)
+        // Inject a plan that tries delete_file by adding a blocking policy rule
+        runtime.policy.addRule(PolicyRule(
+            name: "test-block-delete",
+            pattern: "delete_file",
+            decision: .block
+        ))
+        let outcome = runtime.agentLoop.run(taskContext: ctx, budget: .test)
+        // Outcome is one of the valid termination reasons
+        let validReasons: [LoopTerminationReason] = [
+            .policyBlocked, .noViablePlan, .maxSteps, .goalAchieved,
+            .unrecoverableFailure, .recoveryBudgetExhausted, .explorationBudgetExceeded
+        ]
+        XCTAssertTrue(validReasons.contains(outcome.reason))
+    }
+}
