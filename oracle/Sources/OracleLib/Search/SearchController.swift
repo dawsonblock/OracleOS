@@ -42,7 +42,7 @@ public final class SearchController {
             results.append(SearchResult(
                 source: "graph",
                 title: "Trace: \(t.actionType)",
-                snippet: "success=\(t.success) detail=\(t.detail)",
+                snippet: "success=\(t.success) stateHash=\(t.postStateHash)",
                 url: "graph://trace/recent",
                 timestamp: Date(),
                 relevance: 0.6

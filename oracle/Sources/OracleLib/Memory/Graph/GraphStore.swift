@@ -131,7 +131,6 @@ public final class GraphStore {
     // ── Record execution result ─────────────────────────
 
     public func record(result: ExecutionResult, forAction action: ActionIntent) {
-
         let id = UUID().uuidString
         let ts = ISO8601DateFormatter().string(from: Date())
         let success: Int32 = result.success ? 1 : 0
@@ -143,7 +142,6 @@ public final class GraphStore {
 
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-
         sqlite3_bind_text(stmt, 1, (id as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 2, (action.id as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 3, (action.type as NSString).utf8String, -1, nil)
@@ -168,7 +166,6 @@ public final class GraphStore {
 
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-
         sqlite3_bind_text(stmt, 1, (goal.id as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 2, (goal.description as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 3, (ts as NSString).utf8String, -1, nil)
@@ -179,21 +176,38 @@ public final class GraphStore {
 
     // ── Query recent traces ─────────────────────────────
 
-    public func recentTraces(limit: Int = 20) -> [(actionType: String, success: Bool, detail: String)] {
+    public func recentTraces(limit: Int = 20) -> [ExecutionTrace] {
 
-        var results: [(String, Bool, String)] = []
+        var results: [ExecutionTrace] = []
 
-        let sql = "SELECT action_type, success, detail FROM traces ORDER BY timestamp DESC LIMIT ?"
+        let sql = "SELECT id, action_id, action_type, success, detail, timestamp FROM traces ORDER BY timestamp DESC LIMIT ?"
         var stmt: OpaquePointer?
+        
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return results }
-
+        
         sqlite3_bind_int(stmt, 1, Int32(limit))
 
         while sqlite3_step(stmt) == SQLITE_ROW {
-            let actionType = String(cString: sqlite3_column_text(stmt, 0))
-            let success = sqlite3_column_int(stmt, 1) == 1
-            let detail = sqlite3_column_text(stmt, 2).map { String(cString: $0) } ?? ""
-            results.append((actionType, success, detail))
+            let id = sqlite3_column_text(stmt, 0).map { String(cString: $0) } ?? UUID().uuidString
+            let actionId = sqlite3_column_text(stmt, 1).map { String(cString: $0) } ?? ""
+            let actionType = sqlite3_column_text(stmt, 2).map { String(cString: $0) } ?? "unknown"
+            let success = sqlite3_column_int(stmt, 3) == 1
+            let detail = sqlite3_column_text(stmt, 4).map { String(cString: $0) } ?? ""
+            
+            // Note: Detail / timestamp are unused in the constructor currently
+            // We shim a hash using the detail for now to fit the schema
+            
+            results.append(
+                ExecutionTrace(
+                    actionID: actionId,
+                    actionType: actionType,
+                    preStateHash: "pre_" + String((id + detail).hash),
+                    postStateHash: "post_" + String((id + detail).hash),
+                    verified: success,
+                    success: success,
+                    id: id
+                )
+            )
         }
 
         sqlite3_finalize(stmt)
@@ -203,14 +217,12 @@ public final class GraphStore {
     // ── Node operations ─────────────────────────────────
 
     public func addNode(type: String, label: String, data: String = "") -> String {
-
         let id = UUID().uuidString
         let ts = ISO8601DateFormatter().string(from: Date())
 
         let sql = "INSERT INTO nodes (id, type, label, data, created_at) VALUES (?, ?, ?, ?, ?)"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return id }
-
         sqlite3_bind_text(stmt, 1, (id as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 2, (type as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 3, (label as NSString).utf8String, -1, nil)
@@ -223,7 +235,6 @@ public final class GraphStore {
     }
 
     public func addEdge(source: String, target: String, relation: String, weight: Double = 1.0) {
-
         let id = UUID().uuidString
         let ts = ISO8601DateFormatter().string(from: Date())
 
@@ -233,7 +244,6 @@ public final class GraphStore {
             """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-
         sqlite3_bind_text(stmt, 1, (id as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 2, (source as NSString).utf8String, -1, nil)
         sqlite3_bind_text(stmt, 3, (target as NSString).utf8String, -1, nil)
