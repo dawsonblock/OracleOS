@@ -2193,3 +2193,380 @@ final class WorldStatePipelineIntegrationTests: XCTestCase {
                         "runTests should be blocked when build failed")
     }
 }
+
+// MARK: - 39. Candidate + CandidateResult Tests
+
+final class CandidateTests: XCTestCase {
+
+    func testCandidateCreation() {
+        let schema = ActionSchema(kind: .click, domain: .host, name: "click_btn")
+        let candidate = Candidate(
+            hypothesis: "Button is visible",
+            schema: schema,
+            source: .memory
+        )
+        XCTAssertEqual(candidate.source, .memory)
+        XCTAssertEqual(candidate.schema.name, "click_btn")
+        XCTAssertFalse(candidate.id.isEmpty)
+    }
+
+    func testCandidateResultCreation() {
+        let schema = ActionSchema(kind: .click, domain: .host, name: "click")
+        let candidate = Candidate(hypothesis: "test", schema: schema, source: .graph)
+        let result = CandidateResult(
+            candidate: candidate,
+            success: true,
+            score: 0.9,
+            criticVerdict: .success,
+            elapsedMs: 42.0,
+            notes: ["OK"]
+        )
+        XCTAssertTrue(result.success)
+        XCTAssertEqual(result.score, 0.9)
+        XCTAssertEqual(result.criticVerdict, .success)
+        XCTAssertEqual(result.notes, ["OK"])
+    }
+
+    func testCandidateSourceRawValues() {
+        XCTAssertEqual(CandidateSource.memory.rawValue, "memory")
+        XCTAssertEqual(CandidateSource.graph.rawValue, "graph")
+        XCTAssertEqual(CandidateSource.llmFallback.rawValue, "llm_fallback")
+    }
+}
+
+// MARK: - 40. ResultSelector Tests
+
+final class ResultSelectorTests: XCTestCase {
+
+    private func makeResult(
+        success: Bool,
+        score: Double,
+        verdict: CriticVerdict = .success,
+        elapsedMs: Double = 10,
+        source: CandidateSource = .memory
+    ) -> CandidateResult {
+        let schema = ActionSchema(kind: .click, domain: .host, name: "action")
+        let candidate = Candidate(hypothesis: "test", schema: schema, source: source)
+        return CandidateResult(
+            candidate: candidate,
+            success: success,
+            score: score,
+            criticVerdict: verdict,
+            elapsedMs: elapsedMs
+        )
+    }
+
+    func testSelectsSuccessfulOverFailure() {
+        let selector = ResultSelector()
+        let results = [
+            makeResult(success: false, score: 0.9, verdict: .failure),
+            makeResult(success: true, score: 0.5, verdict: .success)
+        ]
+        let best = selector.selectBest(from: results)
+        XCTAssertNotNil(best)
+        XCTAssertTrue(best!.success)
+    }
+
+    func testSelectsHigherScoreAmongSuccesses() {
+        let selector = ResultSelector()
+        let results = [
+            makeResult(success: true, score: 0.7),
+            makeResult(success: true, score: 0.9)
+        ]
+        let best = selector.selectBest(from: results)
+        XCTAssertEqual(best?.score, 0.9)
+    }
+
+    func testSelectsLowerLatencyOnTiedScore() {
+        let selector = ResultSelector()
+        let results = [
+            makeResult(success: true, score: 0.8, elapsedMs: 100),
+            makeResult(success: true, score: 0.8, elapsedMs: 20)
+        ]
+        let best = selector.selectBest(from: results)
+        XCTAssertEqual(best?.elapsedMs, 20)
+    }
+
+    func testPrefersPartialOverFailure() {
+        let selector = ResultSelector()
+        let results = [
+            makeResult(success: false, score: 0.9, verdict: .failure),
+            makeResult(success: false, score: 0.5, verdict: .partialSuccess)
+        ]
+        let best = selector.selectBest(from: results)
+        XCTAssertEqual(best?.criticVerdict, .partialSuccess)
+    }
+
+    func testEmptyReturnsNil() {
+        let selector = ResultSelector()
+        XCTAssertNil(selector.selectBest(from: []))
+    }
+}
+
+// MARK: - 41. CandidateGenerator Tests
+
+final class CandidateGeneratorTests: XCTestCase {
+
+    func testGenerateWithNoDataReturnsEmpty() {
+        let mem = StateMemoryIndex()
+        let graph = PlanningGraphEngine()
+        let gen = CandidateGenerator(stateMemoryIndex: mem, planningGraphEngine: graph)
+
+        let sig = StateSignature.from(context: "test", actionTypes: ["click"])
+        let candidates = gen.generate(stateSignature: sig, abstractStateID: "idle")
+        XCTAssertTrue(candidates.isEmpty, "No memory or graph data means no candidates")
+    }
+
+    func testGenerateWithMemory() {
+        let mem = StateMemoryIndex()
+        let graph = PlanningGraphEngine()
+        let gen = CandidateGenerator(stateMemoryIndex: mem, planningGraphEngine: graph)
+
+        let sig = StateSignature.from(context: "test", actionTypes: ["click"])
+        // Record enough successful attempts to cross the threshold
+        for _ in 0..<5 {
+            mem.record(stateSignature: sig, actionType: "click_save", success: true)
+        }
+
+        let candidates = gen.generate(stateSignature: sig, abstractStateID: "idle")
+        XCTAssertFalse(candidates.isEmpty, "Should generate memory-based candidates")
+        XCTAssertEqual(candidates.first?.source, .memory)
+    }
+
+    func testGenerateWithGraphEdges() {
+        let mem = StateMemoryIndex()
+        let graph = PlanningGraphEngine()
+        let gen = CandidateGenerator(stateMemoryIndex: mem, planningGraphEngine: graph)
+
+        // Add a graph edge from "idle" state
+        let edge = graph.addEdge(
+            from: "idle",
+            to: "build_started",
+            actionType: "buildProject",
+            domain: .code
+        )
+        graph.recordTraversal(edgeID: edge.id, success: true, cost: 1.0, latencyMs: 50)
+
+        let sig = StateSignature.from(context: "test", actionTypes: [])
+        let candidates = gen.generate(stateSignature: sig, abstractStateID: "idle")
+        XCTAssertFalse(candidates.isEmpty)
+        XCTAssertEqual(candidates.first?.source, .graph)
+    }
+
+    func testLLMFallbackUsedWhenNoMemoryOrGraph() {
+        let mem = StateMemoryIndex()
+        let graph = PlanningGraphEngine()
+        let gen = CandidateGenerator(stateMemoryIndex: mem, planningGraphEngine: graph)
+
+        let sig = StateSignature.from(context: "test", actionTypes: [])
+        let llmSchemas = [
+            ActionSchema(kind: .click, domain: .host, name: "click_btn", description: "LLM suggested")
+        ]
+        let candidates = gen.generate(
+            stateSignature: sig,
+            abstractStateID: "idle",
+            llmSchemas: llmSchemas
+        )
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidates.first?.source, .llmFallback)
+    }
+
+    func testMaxCandidatesRespected() {
+        let mem = StateMemoryIndex()
+        let graph = PlanningGraphEngine()
+        let gen = CandidateGenerator(stateMemoryIndex: mem, planningGraphEngine: graph, maxCandidates: 2)
+
+        let sig = StateSignature.from(context: "test", actionTypes: [])
+        let llmSchemas = (0..<10).map { i in
+            ActionSchema(kind: .custom, domain: .tool, name: "action_\(i)")
+        }
+        let candidates = gen.generate(
+            stateSignature: sig,
+            abstractStateID: "idle",
+            llmSchemas: llmSchemas
+        )
+        XCTAssertLessThanOrEqual(candidates.count, 2)
+    }
+
+    func testSourceCountsTracked() {
+        let mem = StateMemoryIndex()
+        let graph = PlanningGraphEngine()
+        let gen = CandidateGenerator(stateMemoryIndex: mem, planningGraphEngine: graph)
+
+        let sig = StateSignature.from(context: "test", actionTypes: [])
+        let llmSchemas = [
+            ActionSchema(kind: .click, domain: .host, name: "click_x")
+        ]
+        _ = gen.generate(stateSignature: sig, abstractStateID: "idle", llmSchemas: llmSchemas)
+        XCTAssertNotNil(gen.lastSourceCounts[.llmFallback])
+    }
+}
+
+// MARK: - 42. PerceptionEngine Tests
+
+final class PerceptionEngineTests: XCTestCase {
+
+    func testPerceiveProducesResult() {
+        let obs = Observation(
+            app: "Xcode",
+            windowTitle: "Main.swift",
+            elements: [
+                UnifiedElement(id: "b1", role: "button", label: "Build", visible: true, focused: false),
+                UnifiedElement(id: "t1", role: "textfield", label: "Search", visible: true)
+            ]
+        )
+        let result = PerceptionEngine.perceive(observation: obs)
+        XCTAssertEqual(result.compressed.totalCount, 2)
+        XCTAssertFalse(result.observationHash.isEmpty)
+        XCTAssertFalse(result.interactableElements.isEmpty)
+    }
+
+    func testGetContext() {
+        let obs = Observation(
+            app: "Safari",
+            windowTitle: "Google",
+            url: "https://google.com",
+            elements: [
+                UnifiedElement(id: "s", role: "textfield", label: "Search", visible: true)
+            ]
+        )
+        let ctx = PerceptionEngine.getContext(from: obs)
+        XCTAssertEqual(ctx["app"], "Safari")
+        XCTAssertEqual(ctx["url"], "https://google.com")
+        XCTAssertTrue(ctx["elementCount"] == "1")
+    }
+
+    func testFindElements() {
+        let obs = Observation(elements: [
+            UnifiedElement(id: "b1", role: "button", label: "Save", visible: true),
+            UnifiedElement(id: "b2", role: "button", label: "Cancel", visible: true),
+            UnifiedElement(id: "t1", role: "textfield", label: "Name", visible: true)
+        ])
+        let buttons = PerceptionEngine.findElements(in: obs, role: "button")
+        XCTAssertEqual(buttons.count, 2)
+
+        let save = PerceptionEngine.findElements(in: obs, query: "Save")
+        XCTAssertEqual(save.count, 1)
+        XCTAssertEqual(save.first?.id, "b1")
+    }
+
+    func testStateSignatureFromPerception() {
+        let obs = Observation(
+            app: "Xcode",
+            elements: [
+                UnifiedElement(id: "b", role: "button", label: "Run", enabled: true, visible: true)
+            ]
+        )
+        let result = PerceptionEngine.perceive(observation: obs)
+        let sig = PerceptionEngine.stateSignature(from: result)
+        XCTAssertFalse(sig.hash.isEmpty)
+    }
+
+    func testPerceptionResultSummary() {
+        let obs = Observation(app: "Terminal", elements: [
+            UnifiedElement(id: "p", role: "textfield", label: "prompt", visible: true)
+        ])
+        let result = PerceptionEngine.perceive(observation: obs)
+        XCTAssertTrue(result.summary.contains("Terminal"))
+    }
+
+    func testPerceiveFilteresInvisible() {
+        let obs = Observation(elements: [
+            UnifiedElement(id: "v", role: "button", label: "Visible", visible: true),
+            UnifiedElement(id: "h", role: "button", label: "Hidden", visible: false)
+        ])
+        let result = PerceptionEngine.perceive(observation: obs)
+        XCTAssertEqual(result.compressed.totalCount, 1, "Invisible elements filtered")
+    }
+}
+
+// MARK: - 43. SearchController Candidate Pipeline Tests
+
+final class SearchControllerCandidateTests: XCTestCase {
+
+    func testSearchControllerWithoutGeneratorReturnsNil() {
+        let runtime = OracleRuntime()
+        // Don't initialize — candidateGenerator not wired
+        let sig = StateSignature.from(context: "test", actionTypes: [])
+        let result = runtime.searchController.searchCandidates(
+            stateSignature: sig,
+            abstractStateID: "idle"
+        ) { _ in nil }
+        XCTAssertNil(result)
+    }
+
+    func testSearchControllerWithGeneratorAndEvaluator() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        // Inject LLM fallback schemas
+        let llmSchemas = [
+            ActionSchema(kind: .click, domain: .host, name: "click_btn", description: "test")
+        ]
+        let sig = StateSignature.from(context: "test", actionTypes: ["click"])
+        let result = runtime.searchController.searchCandidates(
+            stateSignature: sig,
+            abstractStateID: "idle",
+            llmSchemas: llmSchemas
+        ) { candidate in
+            // Simulate successful execution
+            CandidateResult(
+                candidate: candidate,
+                success: true,
+                score: 0.85,
+                criticVerdict: .success,
+                elapsedMs: 30
+            )
+        }
+        XCTAssertNotNil(result)
+        XCTAssertTrue(result!.success)
+    }
+
+    func testSearchControllerEarlyExitOnMemorySuccess() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        // Seed memory
+        let sig = StateSignature.from(context: "test", actionTypes: [])
+        for _ in 0..<5 {
+            runtime.stateMemory.record(stateSignature: sig, actionType: "click_save", success: true)
+        }
+
+        // Also add graph edges (should not be reached if memory succeeds)
+        let edge = runtime.planningGraphEngine.addEdge(
+            from: "idle",
+            to: "done",
+            actionType: "other_action",
+            domain: .system
+        )
+        runtime.planningGraphEngine.recordTraversal(
+            edgeID: edge.id, success: true, cost: 1, latencyMs: 10
+        )
+
+        var evaluationCount = 0
+        let result = runtime.searchController.searchCandidates(
+            stateSignature: sig,
+            abstractStateID: "idle"
+        ) { candidate in
+            evaluationCount += 1
+            return CandidateResult(
+                candidate: candidate,
+                success: true,
+                score: 0.9,
+                criticVerdict: .success,
+                elapsedMs: 10
+            )
+        }
+
+        XCTAssertNotNil(result)
+        // Early exit: should stop after first successful memory candidate
+        XCTAssertEqual(evaluationCount, 1, "Should early-exit on memory success")
+    }
+
+    func testRuntimeHasCandidateGenerator() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.searchController.candidateGenerator)
+        XCTAssertEqual(runtime.candidateGenerator.maxCandidates, 6)
+    }
+}

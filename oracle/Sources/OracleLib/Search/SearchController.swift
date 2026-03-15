@@ -1,10 +1,17 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────
-// SearchController — federated search gateway (Phase 14)
+// SearchController — federated search + candidate selection
 //
-// Aggregates results from: MetaSearch sidecar, code index
-// sidecar, local graph store, web extractor.
+// Two modes of operation:
+//
+//   1. Federated search (original): aggregates results from
+//      code index, graph store, and web extractor.
+//
+//   2. Candidate-based search (new): generates candidates
+//      via memory/graph/LLM, executes them, selects best.
+//      This is the search-centric action selection pipeline
+//      from the architecture.
 //
 // Follows R4: results are returned as data, never
 // autonomously executed.
@@ -16,11 +23,73 @@ public final class SearchController {
     private let graphStore: GraphStore
     private let webExtractor: WebExtractor
 
+    // ── Candidate-based search subsystem ────────────────
+
+    public private(set) var candidateGenerator: CandidateGenerator?
+    public let resultSelector = ResultSelector()
+
     public init(codeQuery: CodeQueryEngine, graphStore: GraphStore, webExtractor: WebExtractor) {
         self.codeQuery = codeQuery
         self.graphStore = graphStore
         self.webExtractor = webExtractor
     }
+
+    /// Attach the candidate generator for search-centric action selection.
+    public func attachCandidateGenerator(_ generator: CandidateGenerator) {
+        self.candidateGenerator = generator
+    }
+
+    // ── Candidate-based search cycle ────────────────────
+    //
+    // state -> generate candidates -> execute -> verify -> select best
+    //
+    // The evaluate closure is provided by the runtime and is
+    // responsible for running each candidate through
+    // VerifiedActionExecutor + CriticLoop.
+
+    /// Run a full search cycle: generate candidates, execute and
+    /// verify each one, then select the best verified result.
+    ///
+    /// - Parameters:
+    ///   - stateSignature: Current compressed state signature.
+    ///   - abstractStateID: Current abstract state for graph lookup.
+    ///   - llmSchemas: Optional LLM fallback schemas.
+    ///   - evaluate: Closure that executes a candidate and returns
+    ///     its verified result.
+    /// - Returns: The best verified CandidateResult, or nil.
+    public func searchCandidates(
+        stateSignature: StateSignature,
+        abstractStateID: String,
+        llmSchemas: [ActionSchema] = [],
+        evaluate: (Candidate) -> CandidateResult?
+    ) -> CandidateResult? {
+        guard let generator = candidateGenerator else { return nil }
+
+        let candidates = generator.generate(
+            stateSignature: stateSignature,
+            abstractStateID: abstractStateID,
+            llmSchemas: llmSchemas
+        )
+
+        guard !candidates.isEmpty else { return nil }
+
+        var results: [CandidateResult] = []
+        for candidate in candidates {
+            if let result = evaluate(candidate) {
+                results.append(result)
+                // Early exit: if we find a fully successful result
+                // from memory, prefer it immediately.
+                if result.success && result.candidate.source == .memory {
+                    break
+                }
+            }
+        }
+
+        return resultSelector.selectBest(from: results)
+    }
+
+    /// Number of candidates the generator will produce per cycle.
+    public var maxCandidates: Int { candidateGenerator?.maxCandidates ?? 0 }
 
     // ── Unified search ──────────────────────────────────
 

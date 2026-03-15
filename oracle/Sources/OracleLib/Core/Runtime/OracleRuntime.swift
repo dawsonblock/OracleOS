@@ -61,6 +61,13 @@ public final class OracleRuntime {
     // previousObservation tracks the last observation for delta detection
     private var previousObservation: Observation?
 
+    // ── Candidate generation (search-centric selection) ──
+
+    public private(set) lazy var candidateGenerator: CandidateGenerator = CandidateGenerator(
+        stateMemoryIndex: stateMemory,
+        planningGraphEngine: planningGraphEngine
+    )
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -94,7 +101,10 @@ public final class OracleRuntime {
         // 4. Task graph initial position
         taskGraph.updateCurrentNode(context: "idle")
 
-        // 5. Diagnostics baseline
+        // 5. Wire candidate generator into search controller
+        searchController.attachCandidateGenerator(candidateGenerator)
+
+        // 6. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()
