@@ -72,6 +72,32 @@ public final class OracleRuntime {
 
     public private(set) lazy var skillRegistry: SkillRegistry = SkillRegistry.live()
 
+    // ── Coordinator layer ────────────────────────────────
+
+    /// Observation → WorldModelSnapshot pipeline (owns state mutation).
+    public private(set) lazy var stateCoordinator: StateCoordinator = StateCoordinator(
+        worldModel: worldModel
+    )
+
+    /// Sole planner façade — plans but never executes.
+    public private(set) lazy var decisionCoordinator: DecisionCoordinator = DecisionCoordinator(
+        planner: planner,
+        graphStore: memory,
+        stateMemory: stateMemory
+    )
+
+    /// Skill resolution + policy gate — prepares but never executes.
+    public private(set) lazy var executionCoordinator: ExecutionCoordinator = ExecutionCoordinator(
+        skillRegistry: skillRegistry,
+        policy: policy
+    )
+
+    /// Outcome persistence — records into metrics and state memory.
+    public private(set) lazy var learningCoordinator: LearningCoordinator = LearningCoordinator(
+        metrics: metrics,
+        stateMemory: stateMemory
+    )
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -111,7 +137,13 @@ public final class OracleRuntime {
         // 6. Load skill registry (triggers lazy init, registering all built-in skills)
         _ = skillRegistry
 
-        // 7. Diagnostics baseline
+        // 7. Warm up coordinator layer (triggers lazy init for all four coordinators)
+        _ = stateCoordinator
+        _ = decisionCoordinator
+        _ = executionCoordinator
+        _ = learningCoordinator
+
+        // 8. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()

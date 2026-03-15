@@ -2802,3 +2802,358 @@ final class CodeSkillTests: XCTestCase {
         XCTAssertTrue(intent.parameters["args"]?.contains("origin") ?? false)
     }
 }
+
+// MARK: - 47. Coordinator Layer Tests
+
+// ── 47a. CoordinatorTypes ────────────────────────────────────────────────────
+
+final class CoordinatorTypesTests: XCTestCase {
+
+    func testTaskContextDefaults() {
+        let goal = Goal(description: "test goal")
+        let ctx = TaskContext(goal: goal)
+        XCTAssertEqual(ctx.goal.description, "test goal")
+        XCTAssertNil(ctx.workspaceRoot)
+        XCTAssertEqual(ctx.agentKind, .mixed)
+        XCTAssertFalse(ctx.sessionID.isEmpty)
+    }
+
+    func testTaskContextCustom() {
+        let goal = Goal(description: "code goal")
+        let ctx = TaskContext(goal: goal, workspaceRoot: "/workspace", agentKind: .code, sessionID: "sess1")
+        XCTAssertEqual(ctx.workspaceRoot, "/workspace")
+        XCTAssertEqual(ctx.agentKind, .code)
+        XCTAssertEqual(ctx.sessionID, "sess1")
+    }
+
+    func testStateBundleFields() {
+        let goal = Goal(description: "bundle test")
+        let ctx = TaskContext(goal: goal)
+        let snap = WorldModelSnapshot(activeApplication: "Finder")
+        let bundle = StateBundle(taskContext: ctx, snapshot: snap, stepIndex: 3, lastActionID: "act42")
+        XCTAssertEqual(bundle.stepIndex, 3)
+        XCTAssertEqual(bundle.lastActionID, "act42")
+        XCTAssertEqual(bundle.snapshot.activeApplication, "Finder")
+        XCTAssertNil(bundle.observation)
+    }
+
+    func testPreparedActionIsReady() {
+        let intent = ActionIntent(type: "click", domain: .host)
+        let allowed = PreparedAction(intent: intent, policyAllowed: true, confidence: 0.9)
+        XCTAssertTrue(allowed.isReady)
+        XCTAssertNil(allowed.blockReason)
+
+        let blocked = PreparedAction(intent: intent, policyAllowed: false, blockReason: "denied")
+        XCTAssertFalse(blocked.isReady)
+        XCTAssertEqual(blocked.blockReason, "denied")
+    }
+
+    func testAgentKindRawValues() {
+        XCTAssertEqual(AgentKind.ui.rawValue, "ui")
+        XCTAssertEqual(AgentKind.code.rawValue, "code")
+        XCTAssertEqual(AgentKind.mixed.rawValue, "mixed")
+    }
+}
+
+// ── 47b. StateCoordinator ────────────────────────────────────────────────────
+
+final class StateCoordinatorTests: XCTestCase {
+
+    private func makeObservation(app: String) -> Observation {
+        Observation(
+            app: app,
+            windowTitle: "\(app) Window",
+            url: nil,
+            focusedElementID: nil,
+            elements: []
+        )
+    }
+
+    func testIngestUpdatesSnapshot() {
+        let model = WorldStateModel()
+        let coord = StateCoordinator(worldModel: model)
+        let obs = makeObservation(app: "Safari")
+        let snap = coord.ingest(obs)
+        XCTAssertEqual(snap.activeApplication, "Safari")
+        XCTAssertEqual(snap.windowTitle, "Safari Window")
+    }
+
+    func testIngestSequenceTracksDeltas() {
+        let model = WorldStateModel()
+        let coord = StateCoordinator(worldModel: model)
+        let obs1 = makeObservation(app: "Xcode")
+        let obs2 = makeObservation(app: "Terminal")
+        coord.ingest(obs1)
+        let snap2 = coord.ingest(obs2)
+        XCTAssertEqual(snap2.activeApplication, "Terminal")
+    }
+
+    func testBuildBundleWithObservation() {
+        let model = WorldStateModel()
+        let coord = StateCoordinator(worldModel: model)
+        let goal = Goal(description: "open file")
+        let ctx = TaskContext(goal: goal)
+        let obs = makeObservation(app: "Finder")
+        let bundle = coord.buildBundle(taskContext: ctx, observation: obs, stepIndex: 1, lastActionID: "a1")
+        XCTAssertEqual(bundle.snapshot.activeApplication, "Finder")
+        XCTAssertEqual(bundle.stepIndex, 1)
+        XCTAssertEqual(bundle.lastActionID, "a1")
+        XCTAssertNotNil(bundle.observation)
+    }
+
+    func testBuildBundleWithoutObservationUsesCurrentSnapshot() {
+        let model = WorldStateModel()
+        let coord = StateCoordinator(worldModel: model)
+        let goal = Goal(description: "noop")
+        let ctx = TaskContext(goal: goal)
+        let bundle = coord.buildBundle(taskContext: ctx)
+        XCTAssertNil(bundle.observation)
+        XCTAssertEqual(bundle.stepIndex, 0)
+    }
+
+    func testResetClearsHistory() {
+        let model = WorldStateModel()
+        let coord = StateCoordinator(worldModel: model)
+        coord.ingest(makeObservation(app: "Safari"))
+        coord.reset()
+        // After reset, next ingest treats observation as first → no delta path
+        let snap = coord.ingest(makeObservation(app: "Mail"))
+        XCTAssertEqual(snap.activeApplication, "Mail")
+    }
+
+    func testCurrentSnapshotMirrorsModel() {
+        let model = WorldStateModel()
+        let coord = StateCoordinator(worldModel: model)
+        XCTAssertEqual(coord.currentSnapshot.activeApplication, model.snapshot.activeApplication)
+        coord.ingest(makeObservation(app: "Notes"))
+        XCTAssertEqual(coord.currentSnapshot.activeApplication, "Notes")
+        XCTAssertEqual(coord.currentSnapshot.activeApplication, model.snapshot.activeApplication)
+    }
+}
+
+// ── 47c. DecisionCoordinator ─────────────────────────────────────────────────
+
+final class DecisionCoordinatorTests: XCTestCase {
+
+    func testDecideReturnsPlan() {
+        let planner = PlanGenerator()
+        let graph = GraphStore()
+        let memory = StateMemoryIndex()
+        let coord = DecisionCoordinator(planner: planner, graphStore: graph, stateMemory: memory)
+
+        let goal = Goal(description: "write a file")
+        let ctx = TaskContext(goal: goal, workspaceRoot: "/ws")
+        let snap = WorldModelSnapshot()
+        let bundle = StateBundle(taskContext: ctx, snapshot: snap)
+
+        let plan = coord.decide(from: bundle, assembledContext: "context")
+        XCTAssertNotNil(plan)
+        XCTAssertFalse(plan.actions.isEmpty)
+    }
+
+    func testDecideInjectsMemoryHint() {
+        let planner = PlanGenerator()
+        let graph = GraphStore()
+        let memory = StateMemoryIndex()
+
+        let goal = Goal(description: "git push")
+        let sig = StateSignature.from(context: goal.description, actionTypes: [])
+        // Seed memory with enough successes to pass the threshold
+        for _ in 0..<5 {
+            memory.record(stateSignature: sig, actionType: "git_push", success: true)
+        }
+
+        let coord = DecisionCoordinator(planner: planner, graphStore: graph, stateMemory: memory)
+        let ctx = TaskContext(goal: goal)
+        let bundle = StateBundle(taskContext: ctx, snapshot: WorldModelSnapshot())
+        let plan = coord.decide(from: bundle)
+        // The plan is generated (memory hint is woven into context — output is non-empty)
+        XCTAssertFalse(plan.actions.isEmpty)
+    }
+
+    func testIsGoalReachedReturnsFalse() {
+        let coord = DecisionCoordinator(
+            planner: PlanGenerator(),
+            graphStore: GraphStore(),
+            stateMemory: StateMemoryIndex()
+        )
+        let ctx = TaskContext(goal: Goal(description: "test"))
+        let bundle = StateBundle(taskContext: ctx, snapshot: WorldModelSnapshot())
+        XCTAssertFalse(coord.isGoalReached(bundle: bundle))
+    }
+}
+
+// ── 47d. ExecutionCoordinator ─────────────────────────────────────────────────
+
+final class ExecutionCoordinatorTests: XCTestCase {
+
+    func testPrepareAllowsPermittedIntent() {
+        let registry = SkillRegistry.live()
+        let policy = PolicyEngine()
+        let coord = ExecutionCoordinator(skillRegistry: registry, policy: policy)
+        let intent = ActionIntent(type: "log", domain: .system)
+        let snap = WorldModelSnapshot()
+        let prepared = coord.prepare(intent: intent, snapshot: snap)
+        XCTAssertTrue(prepared.policyAllowed)
+        XCTAssertNil(prepared.blockReason)
+    }
+
+    func testPrepareBlocksOnPolicyDeny() {
+        let registry = SkillRegistry.live()
+        let policy = PolicyEngine()
+        let coord = ExecutionCoordinator(skillRegistry: registry, policy: policy)
+        // "delete_file" triggers requireApproval → policy returns false
+        let intent = ActionIntent(type: "delete_file", domain: .code)
+        let snap = WorldModelSnapshot()
+        let prepared = coord.prepare(intent: intent, snapshot: snap)
+        XCTAssertFalse(prepared.policyAllowed)
+        XCTAssertNotNil(prepared.blockReason)
+    }
+
+    func testPrepareFromResolutionAllowed() {
+        let registry = SkillRegistry.live()
+        let policy = PolicyEngine()
+        let coord = ExecutionCoordinator(skillRegistry: registry, policy: policy)
+        let intent = ActionIntent(type: "log", domain: .system)
+        let resolution = SkillResolution(intent: intent, confidence: 0.95)
+        let prepared = coord.prepare(resolution: resolution)
+        XCTAssertTrue(prepared.policyAllowed)
+        XCTAssertEqual(prepared.confidence, 0.95, accuracy: 0.001)
+    }
+
+    func testPrepareFromResolutionBlocked() {
+        let registry = SkillRegistry.live()
+        let policy = PolicyEngine()
+        let coord = ExecutionCoordinator(skillRegistry: registry, policy: policy)
+        let intent = ActionIntent(type: "write_system_file", domain: .code)
+        let resolution = SkillResolution(intent: intent, confidence: 1.0)
+        let prepared = coord.prepare(resolution: resolution)
+        XCTAssertFalse(prepared.policyAllowed)
+    }
+}
+
+// ── 47e. LearningCoordinator ──────────────────────────────────────────────────
+
+final class LearningCoordinatorTests: XCTestCase {
+
+    private func makeBundle(goalDesc: String = "test") -> StateBundle {
+        let goal = Goal(description: goalDesc)
+        let ctx = TaskContext(goal: goal)
+        return StateBundle(taskContext: ctx, snapshot: WorldModelSnapshot())
+    }
+
+    func testRecordSuccessUpdatesMetrics() {
+        let metrics = MetricsRecorder()
+        let memory = StateMemoryIndex()
+        let coord = LearningCoordinator(metrics: metrics, stateMemory: memory)
+        let intent = ActionIntent(type: "run_build", domain: .code)
+        coord.recordSuccess(intent: intent, bundle: makeBundle(), latencyMs: 120)
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalActionsExecuted, 1)
+        XCTAssertEqual(snap.actionSuccessRate, 1.0, accuracy: 0.001)
+        XCTAssertEqual(snap.averageLatencyMs, 120.0, accuracy: 1.0)
+    }
+
+    func testRecordFailureUpdatesMetrics() {
+        let metrics = MetricsRecorder()
+        let memory = StateMemoryIndex()
+        let coord = LearningCoordinator(metrics: metrics, stateMemory: memory)
+        let intent = ActionIntent(type: "run_tests", domain: .code)
+        coord.recordFailure(intent: intent, bundle: makeBundle(), latencyMs: 50)
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalActionsExecuted, 1)
+        XCTAssertEqual(snap.actionSuccessRate, 0.0, accuracy: 0.001)
+    }
+
+    func testRecordSuccessUpdatesStateMemory() {
+        let metrics = MetricsRecorder()
+        let memory = StateMemoryIndex()
+        let coord = LearningCoordinator(metrics: metrics, stateMemory: memory)
+        let intent = ActionIntent(type: "git_commit", domain: .tool)
+        let bundle = makeBundle(goalDesc: "commit changes")
+        // Record enough to exceed minAttempts threshold
+        for _ in 0..<5 {
+            coord.recordSuccess(intent: intent, bundle: bundle, latencyMs: 10)
+        }
+        let sig = StateSignature.from(context: "commit changes", actionTypes: ["git_commit"])
+        XCTAssertTrue(memory.hasMemory(for: sig))
+        let likely = memory.likelyActions(for: sig)
+        XCTAssertTrue(likely.contains("git_commit"))
+    }
+
+    func testRecordRecoveryIncrementsCounter() {
+        let metrics = MetricsRecorder()
+        let memory = StateMemoryIndex()
+        let coord = LearningCoordinator(metrics: metrics, stateMemory: memory)
+        coord.recordRecovery()
+        coord.recordRecovery()
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalRecoveryAttempts, 2)
+    }
+
+    func testFinalizeRecordsGoal() {
+        let metrics = MetricsRecorder()
+        let memory = StateMemoryIndex()
+        let coord = LearningCoordinator(metrics: metrics, stateMemory: memory)
+        let goal = Goal(description: "finish")
+        coord.finalize(goal: goal, succeeded: true, stepCount: 4)
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalGoalsProcessed, 1)
+        XCTAssertEqual(snap.taskSuccessRate, 1.0, accuracy: 0.001)
+    }
+}
+
+// ── 47f. OracleRuntime coordinator wiring ───────────────────────────────────
+
+final class CoordinatorRuntimeWiringTests: XCTestCase {
+
+    func testRuntimeExposesAllCoordinators() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        // All four coordinator properties must be non-nil after initialize()
+        XCTAssertNotNil(runtime.stateCoordinator)
+        XCTAssertNotNil(runtime.decisionCoordinator)
+        XCTAssertNotNil(runtime.executionCoordinator)
+        XCTAssertNotNil(runtime.learningCoordinator)
+    }
+
+    func testStateCoordsSnapshotMatchesRuntimeModel() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        // Before any observations the snapshots should be equal
+        XCTAssertEqual(
+            runtime.stateCoordinator.currentSnapshot.activeApplication,
+            runtime.worldModel.snapshot.activeApplication
+        )
+    }
+
+    func testDecisionCoordinatorProducesPlan() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let goal = Goal(description: "build the project")
+        let ctx = TaskContext(goal: goal, workspaceRoot: "/oracle", agentKind: .code)
+        let bundle = runtime.stateCoordinator.buildBundle(taskContext: ctx)
+        let plan = runtime.decisionCoordinator.decide(from: bundle)
+        XCTAssertFalse(plan.actions.isEmpty)
+    }
+
+    func testExecutionCoordinatorPreparesIntent() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let intent = ActionIntent(type: "log", domain: .system, parameters: ["msg": "hello"])
+        let prepared = runtime.executionCoordinator.prepare(
+            intent: intent,
+            snapshot: runtime.worldModel.snapshot
+        )
+        XCTAssertTrue(prepared.policyAllowed)
+    }
+
+    func testLearningCoordinatorFinalizesGoal() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let goal = Goal(description: "coordinator wiring test")
+        runtime.learningCoordinator.finalize(goal: goal, succeeded: true, stepCount: 2)
+        let snap = runtime.metrics.snapshot()
+        XCTAssertEqual(snap.totalGoalsProcessed, 1)
+    }
+}
