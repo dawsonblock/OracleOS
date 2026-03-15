@@ -849,3 +849,365 @@ final class CriticRuntimeIntegrationTests: XCTestCase {
         XCTAssertFalse(result.postStateHash.isEmpty, "Result should include postStateHash")
     }
 }
+
+// MARK: - 23. TraceReplayEngine Tests
+
+final class TraceReplayEngineTests: XCTestCase {
+
+    func testBeginAndEndTrace() {
+        let engine = TraceReplayEngine()
+        let id = engine.beginTrace(goalID: "g1", goalDescription: "test goal")
+        XCTAssertFalse(id.isEmpty)
+
+        let trace = engine.endTrace()
+        XCTAssertNotNil(trace)
+        XCTAssertEqual(trace?.goalID, "g1")
+        XCTAssertEqual(trace?.steps.count, 0)
+        XCTAssertNotNil(trace?.completedAt)
+    }
+
+    func testRecordSteps() {
+        let engine = TraceReplayEngine()
+        engine.beginTrace(goalID: "g2", goalDescription: "multi-step")
+
+        engine.recordStep(
+            actionType: "log", actionID: "a1",
+            preStateHash: "pre1", postStateHash: "post1",
+            verdict: .success, latencyMs: 5.0
+        )
+        engine.recordStep(
+            actionType: "write_file", actionID: "a2",
+            preStateHash: "pre2", postStateHash: "post2",
+            verdict: .failure, latencyMs: 12.0
+        )
+
+        let trace = engine.endTrace()!
+        XCTAssertEqual(trace.steps.count, 2)
+        XCTAssertEqual(trace.successCount, 1)
+        XCTAssertEqual(trace.failureCount, 1)
+        XCTAssertEqual(trace.totalLatencyMs, 17.0, accuracy: 0.1)
+    }
+
+    func testCompareIdenticalTraces() {
+        let engine = TraceReplayEngine()
+
+        // Record trace A
+        engine.beginTrace(goalID: "g3", goalDescription: "compare A")
+        engine.recordStep(
+            actionType: "log", actionID: "a1",
+            preStateHash: "p1", postStateHash: "p2",
+            verdict: .success, latencyMs: 1.0
+        )
+        let traceA = engine.endTrace()!
+
+        // Record trace B (identical)
+        engine.beginTrace(goalID: "g4", goalDescription: "compare B")
+        engine.recordStep(
+            actionType: "log", actionID: "a1",
+            preStateHash: "p1", postStateHash: "p2",
+            verdict: .success, latencyMs: 2.0
+        )
+        let traceB = engine.endTrace()!
+
+        let divergences = TraceReplayEngine.compare(expected: traceA, actual: traceB)
+        XCTAssertTrue(divergences.isEmpty, "Identical traces should have no divergences")
+    }
+
+    func testCompareDivergentTraces() {
+        let engine = TraceReplayEngine()
+
+        engine.beginTrace(goalID: "g5", goalDescription: "expected")
+        engine.recordStep(
+            actionType: "log", actionID: "a1",
+            preStateHash: "p1", postStateHash: "p2",
+            verdict: .success, latencyMs: 1.0
+        )
+        let expected = engine.endTrace()!
+
+        engine.beginTrace(goalID: "g6", goalDescription: "actual")
+        engine.recordStep(
+            actionType: "write_file", actionID: "a1",
+            preStateHash: "p1", postStateHash: "p3",
+            verdict: .failure, latencyMs: 1.0
+        )
+        let actual = engine.endTrace()!
+
+        let divergences = TraceReplayEngine.compare(expected: expected, actual: actual)
+        XCTAssertFalse(divergences.isEmpty, "Different action types should produce divergence")
+        XCTAssertTrue(divergences[0].reason.contains("action:"))
+    }
+
+    func testCompareDifferentLengthTraces() {
+        let engine = TraceReplayEngine()
+
+        engine.beginTrace(goalID: "g7", goalDescription: "short")
+        engine.recordStep(
+            actionType: "log", actionID: "a1",
+            preStateHash: "p1", postStateHash: "p2",
+            verdict: .success, latencyMs: 1.0
+        )
+        let shortTrace = engine.endTrace()!
+
+        engine.beginTrace(goalID: "g8", goalDescription: "long")
+        engine.recordStep(
+            actionType: "log", actionID: "a1",
+            preStateHash: "p1", postStateHash: "p2",
+            verdict: .success, latencyMs: 1.0
+        )
+        engine.recordStep(
+            actionType: "write_file", actionID: "a2",
+            preStateHash: "p2", postStateHash: "p3",
+            verdict: .success, latencyMs: 2.0
+        )
+        let longTrace = engine.endTrace()!
+
+        let divergences = TraceReplayEngine.compare(expected: shortTrace, actual: longTrace)
+        XCTAssertEqual(divergences.count, 1, "Extra step should produce one divergence")
+        XCTAssertTrue(divergences[0].reason.contains("extra"))
+    }
+
+    func testRenderTrace() {
+        let engine = TraceReplayEngine()
+        engine.beginTrace(goalID: "g9", goalDescription: "render test")
+        engine.recordStep(
+            actionType: "log", actionID: "a1",
+            preStateHash: "pre", postStateHash: "post",
+            verdict: .success, latencyMs: 3.5
+        )
+        let trace = engine.endTrace()!
+        let rendered = engine.renderTrace(trace)
+        XCTAssertTrue(rendered.contains("Replay Trace"))
+        XCTAssertTrue(rendered.contains("log"))
+        XCTAssertTrue(rendered.contains("render test"))
+    }
+
+    func testRecentTraces() {
+        let engine = TraceReplayEngine()
+        for i in 0..<5 {
+            engine.beginTrace(goalID: "g-\(i)", goalDescription: "trace \(i)")
+            engine.recordStep(
+                actionType: "log", actionID: "a-\(i)",
+                preStateHash: "p", postStateHash: "p",
+                verdict: .success, latencyMs: 1.0
+            )
+            _ = engine.endTrace()
+        }
+        let recent = engine.recentTraces(limit: 3)
+        XCTAssertEqual(recent.count, 3)
+    }
+}
+
+// MARK: - 24. StateMemoryIndex Tests
+
+final class StateMemoryIndexTests: XCTestCase {
+
+    func testRecordAndQuery() {
+        let index = StateMemoryIndex()
+        let sig = StateSignature(hash: "state-1")
+
+        index.record(stateSignature: sig, actionType: "click", success: true)
+        index.record(stateSignature: sig, actionType: "click", success: true)
+        index.record(stateSignature: sig, actionType: "click", success: false)
+
+        let stats = index.stats(for: sig)
+        XCTAssertEqual(stats.count, 1)
+        XCTAssertEqual(stats[0].attempts, 3)
+        XCTAssertEqual(stats[0].successes, 2)
+    }
+
+    func testLikelyActions() {
+        let index = StateMemoryIndex()
+        let sig = StateSignature(hash: "state-2")
+
+        // click: 4/5 = 80% success (above threshold)
+        for _ in 0..<4 { index.record(stateSignature: sig, actionType: "click", success: true) }
+        index.record(stateSignature: sig, actionType: "click", success: false)
+
+        // type: 1/5 = 20% success (below threshold)
+        for _ in 0..<4 { index.record(stateSignature: sig, actionType: "type", success: false) }
+        index.record(stateSignature: sig, actionType: "type", success: true)
+
+        let likely = index.likelyActions(for: sig)
+        XCTAssertTrue(likely.contains("click"), "80% success should be likely")
+        XCTAssertFalse(likely.contains("type"), "20% success should not be likely")
+    }
+
+    func testSuccessRate() {
+        let index = StateMemoryIndex()
+        let sig = StateSignature(hash: "state-3")
+
+        index.record(stateSignature: sig, actionType: "read", success: true)
+        index.record(stateSignature: sig, actionType: "read", success: true)
+        index.record(stateSignature: sig, actionType: "read", success: false)
+
+        let rate = index.successRate(for: sig, actionType: "read")
+        XCTAssertNotNil(rate)
+        XCTAssertEqual(rate!, 2.0 / 3.0, accuracy: 0.01)
+    }
+
+    func testHasMemory() {
+        let index = StateMemoryIndex()
+        let sig = StateSignature(hash: "state-4")
+
+        XCTAssertFalse(index.hasMemory(for: sig))
+        index.record(stateSignature: sig, actionType: "log", success: true)
+        XCTAssertTrue(index.hasMemory(for: sig))
+    }
+
+    func testStateSignatureFrom() {
+        let sig1 = StateSignature.from(context: "hello", actionTypes: ["click"])
+        let sig2 = StateSignature.from(context: "hello", actionTypes: ["click"])
+        let sig3 = StateSignature.from(context: "world", actionTypes: ["click"])
+
+        XCTAssertEqual(sig1.hash, sig2.hash, "Same inputs should produce same hash")
+        XCTAssertNotEqual(sig1.hash, sig3.hash, "Different inputs should produce different hash")
+    }
+
+    func testReset() {
+        let index = StateMemoryIndex()
+        let sig = StateSignature(hash: "state-5")
+        index.record(stateSignature: sig, actionType: "log", success: true)
+        XCTAssertEqual(index.stateCount, 1)
+
+        index.reset()
+        XCTAssertEqual(index.stateCount, 0)
+    }
+}
+
+// MARK: - 25. MetricsRecorder Tests
+
+final class MetricsRecorderTests: XCTestCase {
+
+    func testRecordGoals() {
+        let metrics = MetricsRecorder()
+        metrics.recordGoal(success: true, stepCount: 3)
+        metrics.recordGoal(success: true, stepCount: 5)
+        metrics.recordGoal(success: false, stepCount: 2)
+
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalGoalsProcessed, 3)
+        XCTAssertEqual(snap.taskSuccessRate, 2.0 / 3.0, accuracy: 0.01)
+        XCTAssertEqual(snap.averageStepsPerGoal, 10.0 / 3.0, accuracy: 0.01)
+    }
+
+    func testRecordActions() {
+        let metrics = MetricsRecorder()
+        metrics.recordAction(type: "click", success: true)
+        metrics.recordAction(type: "click", success: true)
+        metrics.recordAction(type: "click", success: false)
+        metrics.recordAction(type: "type", success: true)
+
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalActionsExecuted, 4)
+        XCTAssertEqual(snap.actionSuccessRate, 3.0 / 4.0, accuracy: 0.01)
+        XCTAssertEqual(metrics.successRate(forAction: "click"), 2.0 / 3.0, accuracy: 0.01)
+    }
+
+    func testRecordLatency() {
+        let metrics = MetricsRecorder()
+        metrics.recordLatency(10.0)
+        metrics.recordLatency(20.0)
+        metrics.recordLatency(30.0)
+
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.averageLatencyMs, 20.0, accuracy: 0.01)
+    }
+
+    func testRecordRecovery() {
+        let metrics = MetricsRecorder()
+        metrics.recordRecovery()
+        metrics.recordRecovery()
+
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalRecoveryAttempts, 2)
+    }
+
+    func testAllActionStats() {
+        let metrics = MetricsRecorder()
+        metrics.recordAction(type: "click", success: true)
+        metrics.recordAction(type: "type", success: false)
+
+        let stats = metrics.allActionStats()
+        XCTAssertEqual(stats.count, 2)
+    }
+
+    func testSummaryOutput() {
+        let metrics = MetricsRecorder()
+        metrics.recordGoal(success: true, stepCount: 3)
+        metrics.recordAction(type: "log", success: true)
+        let summary = metrics.summary()
+        XCTAssertTrue(summary.contains("Goals:"))
+        XCTAssertTrue(summary.contains("Actions:"))
+    }
+
+    func testReset() {
+        let metrics = MetricsRecorder()
+        metrics.recordGoal(success: true, stepCount: 1)
+        metrics.recordAction(type: "log", success: true)
+        metrics.recordRecovery()
+        metrics.recordLatency(5.0)
+
+        metrics.reset()
+        let snap = metrics.snapshot()
+        XCTAssertEqual(snap.totalGoalsProcessed, 0)
+        XCTAssertEqual(snap.totalActionsExecuted, 0)
+        XCTAssertEqual(snap.totalRecoveryAttempts, 0)
+    }
+}
+
+// MARK: - 26. Dashboard + Metrics Integration Test
+
+final class DashboardMetricsIntegrationTests: XCTestCase {
+
+    func testDashboardSnapshotIncludesMetrics() {
+        let recorder = TraceRecorder()
+        let bus = EventBus()
+        let dashboard = SystemDashboard(traceRecorder: recorder, eventBus: bus)
+        let metrics = MetricsRecorder()
+        let critic = CriticLoop()
+
+        dashboard.attachMetrics(metrics)
+        dashboard.attachCritic(critic)
+
+        metrics.recordAction(type: "log", success: true)
+        metrics.recordRecovery()
+        metrics.recordLatency(5.0)
+
+        let snap = dashboard.snapshot()
+        XCTAssertEqual(snap.totalRecoveries, 1)
+        XCTAssertEqual(snap.averageLatencyMs, 5.0, accuracy: 0.01)
+        XCTAssertEqual(snap.criticSuccessRate, 1.0, accuracy: 0.01)
+    }
+
+    func testRuntimeIncludesReplayAndMetrics() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.replayEngine)
+        XCTAssertNotNil(runtime.stateMemory)
+        XCTAssertNotNil(runtime.metrics)
+    }
+
+    func testRuntimeProcessRecordsMetrics() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        let goal = Goal(description: "read file test")
+        runtime.process(goal: goal)
+
+        let snap = runtime.metrics.snapshot()
+        XCTAssertEqual(snap.totalGoalsProcessed, 1)
+        XCTAssertGreaterThan(snap.totalActionsExecuted, 0, "Should have executed at least one action")
+    }
+
+    func testRuntimeProcessRecordsReplayTrace() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+
+        let goal = Goal(description: "read file replay")
+        runtime.process(goal: goal)
+
+        let traces = runtime.replayEngine.completedTraces()
+        XCTAssertEqual(traces.count, 1, "Should have one completed replay trace")
+        XCTAssertFalse(traces[0].steps.isEmpty, "Replay trace should contain steps")
+    }
+}

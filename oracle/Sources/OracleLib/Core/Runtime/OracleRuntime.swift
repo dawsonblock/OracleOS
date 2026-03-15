@@ -39,6 +39,12 @@ public final class OracleRuntime {
     public let critic = CriticLoop()
     public let recovery = RecoveryCoordinator()
 
+    // ── Replay + State Memory + Metrics ─────────────────
+
+    public let replayEngine = TraceReplayEngine()
+    public let stateMemory = StateMemoryIndex()
+    public let metrics = MetricsRecorder()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -70,6 +76,8 @@ public final class OracleRuntime {
         ActionRegistry.shared.registerDefaults()
 
         // 4. Diagnostics baseline
+        diagnostics.attachMetrics(metrics)
+        diagnostics.attachCritic(critic)
         diagnostics.printStatus()
 
         print("[oracle] Runtime ready")
@@ -119,7 +127,18 @@ public final class OracleRuntime {
 
         eventBus.emit(.planGenerated(plan))
 
+        // ── Begin replay trace for this goal ─────────────
+        let traceID = replayEngine.beginTrace(goalID: goal.id, goalDescription: goal.description)
+
+        // ── Build state signature for state memory ───────
+        let stateSignature = StateSignature.from(
+            context: assembled.text,
+            actionTypes: plan.actions.map { $0.type }
+        )
+
         var aborted = false
+        var stepCount = 0
+        var allSucceeded = true
 
         for action in plan.actions {
 
@@ -134,9 +153,34 @@ public final class OracleRuntime {
             }
 
             // ── Execute (with recovery loop) ─────────────
+            let startTime = Date()
             let (finalResult, finalEvaluation) = executeWithRecovery(
                 action: action,
                 goalID: goal.id
+            )
+            let latencyMs = Date().timeIntervalSince(startTime) * 1000
+
+            stepCount += 1
+
+            // ── Record replay step ───────────────────────
+            replayEngine.recordStep(
+                actionType: action.type,
+                actionID: action.id,
+                preStateHash: finalResult.preStateHash,
+                postStateHash: finalResult.postStateHash,
+                verdict: finalEvaluation.verdict,
+                latencyMs: latencyMs
+            )
+
+            // ── Record metrics ───────────────────────────
+            metrics.recordAction(type: action.type, success: finalResult.success)
+            metrics.recordLatency(latencyMs)
+
+            // ── Update state memory ──────────────────────
+            stateMemory.record(
+                stateSignature: stateSignature,
+                actionType: action.type,
+                success: finalResult.success
             )
 
             // ── Memory commit ────────────────────────────
@@ -151,20 +195,38 @@ public final class OracleRuntime {
             eventBus.emit(.actionCompleted(action, finalResult))
             eventBus.emit(.criticEvaluated(action, finalEvaluation))
 
+            if !finalResult.success { allSucceeded = false }
+
+            // ── Track recovery attempts in metrics ───────
+            if let state = recovery.state(forGoal: goal.id) {
+                let recoveryCount = state.retryCountPerAction[action.id, default: 0]
+                for _ in 0..<recoveryCount {
+                    metrics.recordRecovery()
+                }
+            }
+
             // ── Abort if recovery coordinator says so ────
             if case .abort(let reason) = shouldAbort(evaluation: finalEvaluation, action: action, goalID: goal.id) {
                 print("[oracle] ABORT: \(reason)")
                 eventBus.emit(.goalAborted(goal, reason))
                 aborted = true
+                allSucceeded = false
                 break
             }
 
             // ── Halt plan on unrecovered failure ─────────
             if !finalResult.success && finalEvaluation.verdict == .failure {
                 print("[oracle] Action failed after recovery, halting plan: \(action.type)")
+                allSucceeded = false
                 break
             }
         }
+
+        // ── Complete replay trace ────────────────────────
+        _ = replayEngine.endTrace()
+
+        // ── Record goal metrics ─────────────────────────
+        metrics.recordGoal(success: allSucceeded, stepCount: stepCount)
 
         // Clean up recovery state for this goal
         recovery.clearState(forGoal: goal.id)

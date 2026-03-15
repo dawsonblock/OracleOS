@@ -15,10 +15,22 @@ public final class SystemDashboard {
 
     private let traceRecorder: TraceRecorder
     private let eventBus: EventBus
+    private var metricsRecorder: MetricsRecorder?
+    private var criticLoop: CriticLoop?
 
     public init(traceRecorder: TraceRecorder, eventBus: EventBus) {
         self.traceRecorder = traceRecorder
         self.eventBus = eventBus
+    }
+
+    /// Attach metrics recorder for enriched dashboards.
+    public func attachMetrics(_ metrics: MetricsRecorder) {
+        self.metricsRecorder = metrics
+    }
+
+    /// Attach critic loop for verdict statistics.
+    public func attachCritic(_ critic: CriticLoop) {
+        self.criticLoop = critic
     }
 
     // ── Summary snapshot ──────────────────────────────
@@ -28,6 +40,9 @@ public final class SystemDashboard {
         public let successRate: Double
         public let recentEvents: [String]
         public let uptime: TimeInterval
+        public let criticSuccessRate: Double
+        public let totalRecoveries: Int
+        public let averageLatencyMs: Double
     }
 
     private let startTime = Date()
@@ -38,11 +53,17 @@ public final class SystemDashboard {
         let successes = events.filter { $0.outcome == .success }.count
         let rate = total > 0 ? Double(successes) / Double(total) : 1.0
 
+        let criticRate = criticLoop?.overallSuccessRate() ?? rate
+        let metricsSnap = metricsRecorder?.snapshot()
+
         return DashboardSnapshot(
             totalActions: total,
             successRate: rate,
             recentEvents: [],
-            uptime: Date().timeIntervalSince(startTime)
+            uptime: Date().timeIntervalSince(startTime),
+            criticSuccessRate: criticRate,
+            totalRecoveries: metricsSnap?.totalRecoveryAttempts ?? 0,
+            averageLatencyMs: metricsSnap?.averageLatencyMs ?? 0
         )
     }
 
@@ -53,11 +74,14 @@ public final class SystemDashboard {
     public func printSummary() {
         let s = snapshot()
         print("""
-        ┌──────── Oracle Dashboard ────────┐
-        │ Actions:     \(s.totalActions)
-        │ Success:     \(String(format: "%.1f%%", s.successRate * 100))
-        │ Uptime:      \(String(format: "%.0fs", s.uptime))
-        └──────────────────────────────────┘
+        \u{250c}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500} Oracle Dashboard \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2510}
+        \u{2502} Actions:     \(s.totalActions)
+        \u{2502} Success:     \(String(format: "%.1f%%", s.successRate * 100))
+        \u{2502} Critic:      \(String(format: "%.1f%%", s.criticSuccessRate * 100))
+        \u{2502} Recoveries:  \(s.totalRecoveries)
+        \u{2502} Avg Latency: \(String(format: "%.1fms", s.averageLatencyMs))
+        \u{2502} Uptime:      \(String(format: "%.0fs", s.uptime))
+        \u{2514}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2518}
         """)
     }
 }
