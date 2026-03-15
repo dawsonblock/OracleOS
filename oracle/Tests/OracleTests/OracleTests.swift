@@ -4025,3 +4025,274 @@ final class RuntimeWorkflowWiringTests: XCTestCase {
         XCTAssertTrue(matches.isEmpty, "Candidate plans should not match — requires promotion")
     }
 }
+
+// MARK: - 51. Enhanced Recovery Layer Tests
+
+final class FailureClassTests: XCTestCase {
+
+    func testAllCasesExist() {
+        XCTAssertEqual(FailureClass.allCases.count, 20)
+    }
+
+    func testRawValues() {
+        XCTAssertEqual(FailureClass.elementNotFound.rawValue, "elementNotFound")
+        XCTAssertEqual(FailureClass.buildFailed.rawValue, "buildFailed")
+        XCTAssertEqual(FailureClass.workflowReplayFailure.rawValue, "workflowReplayFailure")
+    }
+
+    func testCodable() throws {
+        let data = try JSONEncoder().encode(FailureClass.testFailed)
+        let decoded = try JSONDecoder().decode(FailureClass.self, from: data)
+        XCTAssertEqual(decoded, .testFailed)
+    }
+}
+
+final class FailureClassifierTests: XCTestCase {
+
+    func testClassifiesBuildFailed() {
+        let result = FailureClassifier.classify(errorDescription: "build failed: exit code 1")
+        XCTAssertEqual(result.failureClass, .buildFailed)
+        XCTAssertGreaterThan(result.confidence, 0.5)
+    }
+
+    func testClassifiesTestFailed() {
+        let result = FailureClassifier.classify(errorDescription: "test failed: 3 assertions")
+        XCTAssertEqual(result.failureClass, .testFailed)
+    }
+
+    func testClassifiesModalBlocking() {
+        let result = FailureClassifier.classify(errorDescription: "modal blocking user interaction")
+        XCTAssertEqual(result.failureClass, .modalBlocking)
+    }
+
+    func testClassifiesPermissionBlocked() {
+        let result = FailureClassifier.classify(errorDescription: "permission denied for accessibility")
+        XCTAssertEqual(result.failureClass, .permissionBlocked)
+    }
+
+    func testClassifiesWrongFocus() {
+        let result = FailureClassifier.classify(errorDescription: "wrong focus — target not in active window")
+        XCTAssertEqual(result.failureClass, .wrongFocus)
+    }
+
+    func testClassifiesAmbiguous() {
+        let result = FailureClassifier.classify(errorDescription: "element is ambiguous: 3 matches")
+        XCTAssertEqual(result.failureClass, .elementAmbiguous)
+    }
+
+    func testClassifiesNavigationFailed() {
+        let result = FailureClassifier.classify(errorDescription: "navigation to URL failed")
+        XCTAssertEqual(result.failureClass, .navigationFailed)
+    }
+
+    func testFallsThroughToActionFailed() {
+        let result = FailureClassifier.classify(errorDescription: "unknown execution error xyz")
+        XCTAssertEqual(result.failureClass, .actionFailed)
+        XCTAssertEqual(result.confidence, 0.40, accuracy: 0.01)
+    }
+
+    func testContextBoostsConfidence() {
+        let base = FailureClassifier.classify(errorDescription: "build failed: exit code 1")
+        let ctx = FailureClassifierContext(recentFailureClasses: [.buildFailed])
+        let boosted = FailureClassifier.classify(errorDescription: "build failed: exit code 1", context: ctx)
+        XCTAssertGreaterThan(boosted.confidence, base.confidence)
+    }
+
+    func testClassificationHasSignals() {
+        let result = FailureClassifier.classify(errorDescription: "build failed: exit code 1")
+        XCTAssertFalse(result.signals.isEmpty)
+    }
+
+    func testConfidenceIsClamped() {
+        let ctx = FailureClassifierContext(recentFailureClasses: Array(repeating: .buildFailed, count: 20))
+        let result = FailureClassifier.classify(errorDescription: "build failed", context: ctx)
+        XCTAssertLessThanOrEqual(result.confidence, 1.0)
+    }
+}
+
+final class RecoveryStrategyTests: XCTestCase {
+
+    func testRecoveryPreparationInit() {
+        let prep = RecoveryPreparation(strategyName: "retry", actionHint: "retry now", estimatedCost: 0.5)
+        XCTAssertEqual(prep.strategyName, "retry")
+        XCTAssertEqual(prep.actionHint, "retry now")
+        XCTAssertEqual(prep.estimatedCost, 0.5, accuracy: 0.001)
+    }
+
+    func testRecoveryPreparationClampsCostToZero() {
+        let prep = RecoveryPreparation(strategyName: "x", actionHint: "y", estimatedCost: -1.0)
+        XCTAssertEqual(prep.estimatedCost, 0.0)
+    }
+
+    func testRecoveryAttemptSucceeded() {
+        let prep = RecoveryPreparation(strategyName: "dismiss_dialog", actionHint: "escape")
+        let attempt = RecoveryAttempt.success(strategy: "dismiss_dialog", preparation: prep)
+        XCTAssertTrue(attempt.succeeded)
+        XCTAssertNotNil(attempt.preparation)
+    }
+
+    func testRecoveryAttemptExhausted() {
+        let attempt = RecoveryAttempt.exhausted()
+        XCTAssertFalse(attempt.succeeded)
+        XCTAssertNil(attempt.preparation)
+    }
+
+    func testRecoveryAttemptNoStrategy() {
+        let attempt = RecoveryAttempt.noStrategy()
+        XCTAssertFalse(attempt.succeeded)
+    }
+}
+
+final class RecoveryStrategyLibraryTests: XCTestCase {
+
+    func testDefaultLibraryHasEightEntries() {
+        let lib = RecoveryStrategyLibrary()
+        XCTAssertEqual(lib.entries.count, 8)
+    }
+
+    func testSharedInstanceIsNonNil() {
+        XCTAssertNotNil(RecoveryStrategyLibrary.shared)
+    }
+
+    func testApplicableForBuildFailed() {
+        let lib = RecoveryStrategyLibrary()
+        let entries = lib.applicable(for: .buildFailed)
+        XCTAssertFalse(entries.isEmpty)
+        let names = entries.map(\.name)
+        XCTAssertTrue(names.contains("rollback_patch") || names.contains("rebuild_environment"))
+    }
+
+    func testApplicableForModalBlocking() {
+        let lib = RecoveryStrategyLibrary()
+        let entries = lib.applicable(for: .modalBlocking)
+        XCTAssertFalse(entries.isEmpty)
+        XCTAssertTrue(entries.contains { $0.name == "dismiss_dialog" })
+    }
+
+    func testApplicableSortedByCostAscending() {
+        let lib = RecoveryStrategyLibrary()
+        let entries = lib.applicable(for: .navigationFailed)
+        guard entries.count >= 2 else { return }
+        for i in 0..<(entries.count - 1) {
+            XCTAssertLessThanOrEqual(entries[i].baseCost, entries[i + 1].baseCost)
+        }
+    }
+
+    func testEntryLookupByName() {
+        let lib = RecoveryStrategyLibrary()
+        let entry = lib.entry(named: "dismiss_dialog")
+        XCTAssertNotNil(entry)
+        XCTAssertEqual(entry?.name, "dismiss_dialog")
+    }
+
+    func testEntryLookupMissingReturnsNil() {
+        let lib = RecoveryStrategyLibrary()
+        XCTAssertNil(lib.entry(named: "nonexistent_strategy"))
+    }
+
+    func testCustomLibraryInit() {
+        let custom = RecoveryStrategyEntry(
+            name: "custom_strategy",
+            applicableFailures: [.actionFailed],
+            description: "Custom recovery"
+        )
+        let lib = RecoveryStrategyLibrary(entries: [custom])
+        XCTAssertEqual(lib.entries.count, 1)
+        XCTAssertEqual(lib.entries.first?.name, "custom_strategy")
+    }
+
+    func testAllEntriesHaveNonEmptyApplicableFailures() {
+        let lib = RecoveryStrategyLibrary()
+        for entry in lib.entries {
+            XCTAssertFalse(entry.applicableFailures.isEmpty, "\(entry.name) has no applicable failures")
+        }
+    }
+}
+
+final class RecoveryStrategySelectorTests: XCTestCase {
+
+    func testSelectReturnsEntries() {
+        let selector = RecoveryStrategySelector()
+        let selection = selector.select(for: .buildFailed)
+        XCTAssertFalse(selection.orderedEntries.isEmpty)
+        XCTAssertEqual(selection.failureClass, .buildFailed)
+    }
+
+    func testSelectReturnsEmptyForUnhandledClass() {
+        let lib = RecoveryStrategyLibrary(entries: [
+            RecoveryStrategyEntry(name: "only_modal", applicableFailures: [.modalBlocking], description: "x")
+        ])
+        let selector = RecoveryStrategySelector(library: lib)
+        let selection = selector.select(for: .buildFailed)
+        XCTAssertTrue(selection.orderedEntries.isEmpty)
+    }
+
+    func testPreferredStrategyMovedToFront() {
+        let selector = RecoveryStrategySelector()
+        let allEntries = selector.select(for: .buildFailed)
+        guard allEntries.orderedEntries.count >= 2 else { return }
+        let lastName = allEntries.orderedEntries.last!.name
+        let biased = selector.select(for: .buildFailed, preferredName: lastName)
+        XCTAssertEqual(biased.orderedEntries.first?.name, lastName)
+    }
+
+    func testAttemptSucceedsForKnownFailure() {
+        let selector = RecoveryStrategySelector()
+        let snapshot = WorldModelSnapshot()
+        let attempt = selector.attempt(failure: .buildFailed, snapshot: snapshot)
+        XCTAssertTrue(attempt.succeeded)
+        XCTAssertNotNil(attempt.preparation)
+    }
+
+    func testAttemptReturnsNoStrategyForUnhandledClass() {
+        let lib = RecoveryStrategyLibrary(entries: [])
+        let selector = RecoveryStrategySelector(library: lib)
+        let snapshot = WorldModelSnapshot()
+        let attempt = selector.attempt(failure: .buildFailed, snapshot: snapshot)
+        XCTAssertFalse(attempt.succeeded)
+    }
+
+    func testPreparationContainsStrategyName() {
+        let selector = RecoveryStrategySelector()
+        let snapshot = WorldModelSnapshot()
+        let attempt = selector.attempt(failure: .modalBlocking, snapshot: snapshot)
+        XCTAssertEqual(attempt.preparation?.strategyName, "dismiss_dialog")
+    }
+}
+
+final class RuntimeRecoveryWiringTests: XCTestCase {
+
+    func testRuntimeHasRecoveryStrategyLibrary() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.recoveryStrategyLibrary)
+        XCTAssertFalse(runtime.recoveryStrategyLibrary.entries.isEmpty)
+    }
+
+    func testRuntimeHasRecoveryStrategySelector() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.recoveryStrategySelector)
+    }
+
+    func testRuntimeRecoverySelectsForBuildFailed() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let snapshot = runtime.worldModel.snapshot
+        let attempt = runtime.recoveryStrategySelector.attempt(failure: .buildFailed, snapshot: snapshot)
+        XCTAssertTrue(attempt.succeeded)
+    }
+
+    func testRuntimeRecoveryAndClassifierIntegration() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let classification = FailureClassifier.classify(errorDescription: "build failed: exit code 1")
+        let snapshot = runtime.worldModel.snapshot
+        let attempt = runtime.recoveryStrategySelector.attempt(
+            failure: classification.failureClass,
+            snapshot: snapshot
+        )
+        XCTAssertTrue(attempt.succeeded)
+        XCTAssertEqual(classification.failureClass, .buildFailed)
+    }
+}

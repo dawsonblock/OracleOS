@@ -115,6 +115,12 @@ public final class OracleRuntime {
     /// Matches an incoming goal to promoted workflow plans in the index.
     public private(set) lazy var workflowMatcher: WorkflowMatcher = WorkflowMatcher()
 
+    /// Built-in library of recovery strategy descriptors.
+    public private(set) lazy var recoveryStrategyLibrary: RecoveryStrategyLibrary = RecoveryStrategyLibrary()
+
+    /// Selects and prepares recovery strategies from the library.
+    public private(set) lazy var recoveryStrategySelector: RecoveryStrategySelector = RecoveryStrategySelector(library: recoveryStrategyLibrary)
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -169,7 +175,11 @@ public final class OracleRuntime {
         _ = workflowIndex
         _ = workflowMatcher
 
-        // 10. Diagnostics baseline
+        // 10. Enhanced recovery layer warm-up
+        _ = recoveryStrategyLibrary
+        _ = recoveryStrategySelector
+
+        // 11. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()
