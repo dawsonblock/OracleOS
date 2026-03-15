@@ -23,20 +23,56 @@ public final class PlanSimulator {
 
     public init() {}
 
-    public func simulate(plan: Plan) -> SimulationResult {
+    public func simulate(plan: Plan, context: PlanningContext) -> SimulationResult {
 
         guard !plan.actions.isEmpty else {
             return SimulationResult.infeasible
         }
 
-        // Phase 3+: validate action preconditions, check resource requirements
-        // Phase 0: accept all non-empty plans
+        var totalCost: Double = 0
+        var warnings: [String] = []
+        var feasible = true
+
+        // Phase 1 Simulation Constraints
+        for action in plan.actions {
+            // 1. Calculate operational cost based on domain
+            switch action.domain {
+            case .browser, .host:
+                totalCost += 5.0
+            case .code, .tool:
+                totalCost += 3.0
+            case .search:
+                totalCost += 2.0
+            case .system:
+                totalCost += 1.0
+            }
+
+            // 2. Check memory for identical recent failures
+            // R2 Rule: If something consistently failed, warn or block repetition.
+            let previousFailures = context.recentActions.filter {
+                $0.actionType == action.type && !$0.success
+            }
+            if previousFailures.count > 2 {
+                warnings.append("High risk: Action type \(action.type) has failed \(previousFailures.count) times recently.")
+                feasible = false
+            }
+        }
+
+        // Bounded constraint check
+        if totalCost > 50.0 {
+            warnings.append("Cost exceeds nominal threshold (50.0).")
+        }
+        
+        let cycleDetected =  Set(plan.actions.map { $0.type }).count < plan.actions.count
+        if cycleDetected {
+            warnings.append("Actions contain redundant loops.")
+        }
 
         return SimulationResult(
-            feasible: true,
-            estimatedCost: Double(plan.actions.count),
+            feasible: feasible,
+            estimatedCost: totalCost,
             estimatedSteps: plan.actions.count,
-            warnings: []
+            warnings: warnings
         )
     }
 }
@@ -53,8 +89,20 @@ public final class PlanEvaluator {
 
         // Phase 3+: rank competing plans by:
         //   success probability, estimated cost, step count, risk
+        
+        guard simulation.feasible else {
+            return Plan.empty
+        }
 
-        let confidence = simulation.feasible ? 0.8 : 0.0
+        // Base confidence derived from simulation constraints
+        var confidence = 1.0
+
+        // Subtractive heuristcs 
+        confidence -= (simulation.estimatedCost * 0.02)  // Cost penalty
+        confidence -= Double(simulation.warnings.count) * 0.1 // Warnings penalty
+        
+        // Floor constraints
+        confidence = max(0.1, min(confidence, 1.0))
 
         return Plan(
             actions: plan.actions,

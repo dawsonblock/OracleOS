@@ -130,7 +130,7 @@ final class PlanGeneratorTests: XCTestCase {
         let planner = PlanGenerator()
         let plan = planner.generate(goal: goal, context: "context")
 
-        let sim = simulator.simulate(plan: plan)
+        let sim = simulator.simulate(plan: plan, context: PlanningContext.from(goal: goal, assembledContext: "context", recentTraces: []))
         XCTAssertTrue(sim.feasible, "Simple plan should be feasible")
     }
 }
@@ -430,11 +430,11 @@ final class SearchTests: XCTestCase {
     func testSearchRanking() {
         let ranker = SearchRanking()
         let results = [
-            SearchController.SearchResult(source: "code", title: "a", snippet: "low", relevance: 0.2),
-            SearchController.SearchResult(source: "web", title: "b", snippet: "high", relevance: 0.9),
-            SearchController.SearchResult(source: "graph", title: "c", snippet: "mid", relevance: 0.5),
+            SearchController.SearchResult(source: "code", title: "a", snippet: "low", url: "code://a", timestamp: Date(), relevance: 0.2),
+            SearchController.SearchResult(source: "web", title: "b", snippet: "high", url: "web://b", timestamp: Date(), relevance: 0.9),
+            SearchController.SearchResult(source: "graph", title: "c", snippet: "mid", url: "graph://c", timestamp: Date(), relevance: 0.5),
         ]
-        let ranked = ranker.rank(results)
+        let ranked = ranker.rank(results, query: "high")
         XCTAssertEqual(ranked.first?.title, "b", "Highest score should rank first")
     }
 }

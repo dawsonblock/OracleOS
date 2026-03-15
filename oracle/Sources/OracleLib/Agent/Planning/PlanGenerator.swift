@@ -84,7 +84,7 @@ public final class PlanGenerator {
         )
 
         // 3. Simulate (dry run)
-        let simResult = simulator.simulate(plan: candidate)
+        let simResult = simulator.simulate(plan: candidate, context: planContext)
         guard simResult.feasible else {
             print("[planner] Plan simulation failed — returning empty plan")
             return Plan.empty
