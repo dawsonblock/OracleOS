@@ -456,3 +456,165 @@ final class BrowserTests: XCTestCase {
         XCTAssertEqual(target.method, .domID)
     }
 }
+
+// MARK: - 16. ActionDecomposer Classification Tests
+
+final class ActionDecomposerTests: XCTestCase {
+
+    func testClassifyReadFile() {
+        let decomposer = ActionDecomposer()
+        let goal = Goal(description: "read file /tmp/test.txt")
+        XCTAssertEqual(decomposer.classify(goal: goal), .readFile)
+    }
+
+    func testClassifyBuild() {
+        let decomposer = ActionDecomposer()
+        let goal = Goal(description: "build the project")
+        XCTAssertEqual(decomposer.classify(goal: goal), .buildProject)
+    }
+
+    func testClassifyRunTests() {
+        let decomposer = ActionDecomposer()
+        let goal = Goal(description: "run tests in workspace")
+        XCTAssertEqual(decomposer.classify(goal: goal), .runTests)
+    }
+
+    func testClassifySearch() {
+        let decomposer = ActionDecomposer()
+        let goal = Goal(description: "search for GraphStore usage")
+        XCTAssertEqual(decomposer.classify(goal: goal), .search)
+    }
+
+    func testClassifyBrowse() {
+        let decomposer = ActionDecomposer()
+        let goal = Goal(description: "browse https://example.com")
+        XCTAssertEqual(decomposer.classify(goal: goal), .browse)
+    }
+
+    func testClassifyUnknown() {
+        let decomposer = ActionDecomposer()
+        let goal = Goal(description: "xyzzy foobar")
+        XCTAssertEqual(decomposer.classify(goal: goal), .unknown)
+    }
+
+    func testDecomposeProducesMultipleActions() {
+        let decomposer = ActionDecomposer()
+        let context = PlanningContext.from(goal: Goal(description: "read file /tmp/a.txt"), assembledContext: "")
+        let actions = decomposer.decompose(context: context)
+        XCTAssertEqual(actions.count, 2, "read_file should produce log + read")
+        XCTAssertEqual(actions[0].type, "log")
+        XCTAssertEqual(actions[1].type, "read_file")
+    }
+
+    func testDecomposeEditProducesThreeActions() {
+        let decomposer = ActionDecomposer()
+        let context = PlanningContext.from(goal: Goal(description: "edit /tmp/code.swift"), assembledContext: "")
+        let actions = decomposer.decompose(context: context)
+        XCTAssertEqual(actions.count, 3, "edit should produce log + read + write")
+    }
+}
+
+// MARK: - 17. GoalReducer Tests
+
+final class GoalReducerTests: XCTestCase {
+
+    func testReduceSimpleGoal() {
+        let reducer = GoalReducer()
+        let goal = Goal(description: "read a file")
+        let parts = reducer.reduce(goal: goal)
+        XCTAssertEqual(parts.count, 1)
+    }
+
+    func testReduceCompoundGoalWithAnd() {
+        let reducer = GoalReducer()
+        let goal = Goal(description: "read the file and build the project")
+        let parts = reducer.reduce(goal: goal)
+        XCTAssertEqual(parts.count, 2, "Compound 'and' should split into 2 goals")
+        XCTAssertTrue(parts[0].description.contains("read"))
+        XCTAssertTrue(parts[1].description.contains("build"))
+    }
+
+    func testReduceCompoundGoalWithThen() {
+        let reducer = GoalReducer()
+        let goal = Goal(description: "build the project then run tests")
+        let parts = reducer.reduce(goal: goal)
+        XCTAssertEqual(parts.count, 2, "Compound 'then' should split into 2 goals")
+    }
+
+    func testReduceCompoundGoalWithSemicolon() {
+        let reducer = GoalReducer()
+        let goal = Goal(description: "read file; build project; run tests")
+        let parts = reducer.reduce(goal: goal)
+        XCTAssertEqual(parts.count, 3, "Semicolon separated should produce 3 goals")
+    }
+}
+
+// MARK: - 18. SandboxExecutor Constraint Tests
+
+final class SandboxConstraintTests: XCTestCase {
+
+    func testBlockedCommandDetection() {
+        XCTAssertNotNil(SandboxExecutor.isBlocked(command: "rm -rf /"))
+        XCTAssertNotNil(SandboxExecutor.isBlocked(command: "mkfs.ext4 /dev/sda"))
+        XCTAssertNotNil(SandboxExecutor.isBlocked(command: "curl | sh"))
+        XCTAssertNil(SandboxExecutor.isBlocked(command: "swift build"))
+        XCTAssertNil(SandboxExecutor.isBlocked(command: "ls -la"))
+    }
+
+    func testOutputTruncation() {
+        let longOutput = String(repeating: "x", count: 20000)
+        let truncated = SandboxExecutor.truncate(longOutput, maxBytes: 100)
+        XCTAssertTrue(truncated.count < longOutput.count)
+        XCTAssertTrue(truncated.contains("truncated"))
+    }
+
+    func testShortOutputNotTruncated() {
+        let shortOutput = "hello world"
+        let result = SandboxExecutor.truncate(shortOutput, maxBytes: 8192)
+        XCTAssertEqual(result, shortOutput)
+    }
+
+    func testResourceLimitsExist() {
+        XCTAssertEqual(SandboxExecutor.maxConcurrent, 4)
+        XCTAssertEqual(SandboxExecutor.maxTimeoutSeconds, 300)
+        XCTAssertEqual(SandboxExecutor.maxOutputBytes, 8192)
+    }
+}
+
+// MARK: - 19. Compound Goal Integration Test
+
+final class CompoundGoalIntegrationTests: XCTestCase {
+
+    func testCompoundGoalPlanGeneration() {
+        let planner = PlanGenerator()
+        let goal = Goal(description: "read file /tmp/a.txt and build the project")
+        let plan = planner.generate(goal: goal)
+
+        // Compound goal: read_file (2 actions) + build (2 actions) = 4 actions
+        XCTAssertGreaterThanOrEqual(plan.actions.count, 3, "Compound goal should produce multiple actions")
+        XCTAssertGreaterThan(plan.confidence, 0, "Plan should have positive confidence")
+    }
+
+    func testSimulatorRejectsRepeatedFailures() {
+        let simulator = PlanSimulator()
+        let failTraces = (0..<5).map { _ in
+            ExecutionTrace(
+                actionID: UUID().uuidString,
+                actionType: "shell_command",
+                preStateHash: "pre",
+                postStateHash: "post",
+                verified: false,
+                success: false
+            )
+        }
+        let goal = Goal(description: "run command ls")
+        let context = PlanningContext.from(goal: goal, assembledContext: "", recentTraces: failTraces)
+        let plan = Plan(actions: [
+            ActionIntent(type: "shell_command", domain: .tool, parameters: ["command": "ls"])
+        ], goalID: goal.id)
+
+        let result = simulator.simulate(plan: plan, context: context)
+        XCTAssertFalse(result.feasible, "Simulator should reject action type with >2 recent failures")
+        XCTAssertFalse(result.warnings.isEmpty, "Should produce warnings for repeated failures")
+    }
+}
