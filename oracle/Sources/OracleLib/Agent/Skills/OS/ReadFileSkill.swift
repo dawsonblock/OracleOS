@@ -23,7 +23,7 @@ public struct ReadFileSkill: Skill {
             domain: .host,
             parameters: [
                 "path": path,
-                "app": worldSnapshot.focusedApp ?? "Finder"
+                "app": worldSnapshot.activeApplication ?? "Finder"
             ]
         )
 

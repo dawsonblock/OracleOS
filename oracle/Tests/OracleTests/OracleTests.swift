@@ -2611,18 +2611,18 @@ final class OSSkillTests: XCTestCase {
 
     private func makeSnapshot() -> WorldModelSnapshot {
         WorldModelSnapshot(
-            snapshotID: UUID().uuidString,
-            capturedAt: Date(),
-            elements: [],
-            focusedApp: "TestApp",
-            frontmostURL: nil,
-            clipboardSnippet: nil,
-            buildSucceeded: nil,
-            gitClean: nil,
+            activeApplication: "TestApp",
+            windowTitle: nil,
+            url: nil,
+            visibleElementCount: 0,
+            modalPresent: false,
+            focusedElementID: nil,
+            repositoryRoot: nil,
+            activeBranch: nil,
+            isGitDirty: false,
+            buildSucceeded: true,
             failingTestCount: 0,
-            elementCount: 0,
-            interactableCount: 0,
-            textInputCount: 0
+            observationHash: nil
         )
     }
 

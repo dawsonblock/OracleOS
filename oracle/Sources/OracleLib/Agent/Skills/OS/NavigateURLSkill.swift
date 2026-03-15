@@ -26,7 +26,7 @@ public struct NavigateURLSkill: Skill {
             domain: .browser,
             parameters: [
                 "url": url,
-                "app": worldSnapshot.focusedApp ?? "unknown"
+                "app": worldSnapshot.activeApplication ?? "unknown"
             ]
         )
 

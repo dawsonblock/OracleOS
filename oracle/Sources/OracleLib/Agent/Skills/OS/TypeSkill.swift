@@ -32,7 +32,7 @@ public struct TypeSkill: Skill {
                 "query": query,
                 "targetID": match.elementID,
                 "text": text,
-                "app": worldSnapshot.focusedApp ?? "unknown"
+                "app": worldSnapshot.activeApplication ?? "unknown"
             ]
         )
 

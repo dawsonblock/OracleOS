@@ -29,7 +29,7 @@ public struct ClickSkill: Skill {
             parameters: [
                 "query": query,
                 "targetID": match.elementID,
-                "app": worldSnapshot.focusedApp ?? "unknown"
+                "app": worldSnapshot.activeApplication ?? "unknown"
             ]
         )
 

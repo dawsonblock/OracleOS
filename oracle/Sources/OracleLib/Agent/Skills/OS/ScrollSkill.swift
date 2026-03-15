@@ -24,7 +24,7 @@ public struct ScrollSkill: Skill {
             parameters: [
                 "direction": direction,
                 "amount": amount,
-                "app": worldSnapshot.focusedApp ?? "unknown"
+                "app": worldSnapshot.activeApplication ?? "unknown"
             ]
         )
 

@@ -16,7 +16,7 @@ public struct SwitchWindowSkill: Skill {
         parameters: [String: String]
     ) throws -> SkillResolution {
         let windowTitle = parameters["windowTitle"] ?? query
-        let appName = parameters["app"] ?? worldSnapshot.focusedApp ?? "unknown"
+        let appName = parameters["app"] ?? worldSnapshot.activeApplication ?? "unknown"
 
         let intent = ActionIntent(
             type: "switch_window",

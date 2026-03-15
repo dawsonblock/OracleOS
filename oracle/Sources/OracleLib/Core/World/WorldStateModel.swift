@@ -26,6 +26,8 @@ public struct WorldModelSnapshot: Equatable {
     public var visibleElementCount: Int
     public var modalPresent: Bool
     public var focusedElementID: String?
+    /// Visible element labels for OS target resolution (e.g. from AX/Observation).
+    public var elementLabels: [String]
 
     // ── Code / repository layer ─────────────────────────
 
@@ -50,6 +52,7 @@ public struct WorldModelSnapshot: Equatable {
         visibleElementCount: Int = 0,
         modalPresent: Bool = false,
         focusedElementID: String? = nil,
+        elementLabels: [String] = [],
         repositoryRoot: String? = nil,
         activeBranch: String? = nil,
         isGitDirty: Bool = false,
@@ -64,6 +67,7 @@ public struct WorldModelSnapshot: Equatable {
         self.visibleElementCount = visibleElementCount
         self.modalPresent = modalPresent
         self.focusedElementID = focusedElementID
+        self.elementLabels = elementLabels
         self.repositoryRoot = repositoryRoot
         self.activeBranch = activeBranch
         self.isGitDirty = isGitDirty
