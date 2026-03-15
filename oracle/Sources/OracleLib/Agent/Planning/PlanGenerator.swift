@@ -41,15 +41,15 @@ public struct Plan {
 public struct PlanningContext {
 
     public let goal: Goal
-    public let recentActions: [String]
+    public let recentActions: [ExecutionTrace]
     public let memoryHints: [String]
     public let codeContext: [String]
     public let webContext: [String]
 
-    public static func from(goal: Goal, assembledContext: String) -> PlanningContext {
+    public static func from(goal: Goal, assembledContext: String, recentTraces: [ExecutionTrace] = []) -> PlanningContext {
         return PlanningContext(
             goal: goal,
-            recentActions: [],
+            recentActions: recentTraces,
             memoryHints: [assembledContext],
             codeContext: [],
             webContext: []
@@ -69,9 +69,9 @@ public final class PlanGenerator {
 
     public init() {}
 
-    public func generate(goal: Goal, context: String = "") -> Plan {
+    public func generate(goal: Goal, context: String = "", recentTraces: [ExecutionTrace] = []) -> Plan {
 
-        let planContext = PlanningContext.from(goal: goal, assembledContext: context)
+        let planContext = PlanningContext.from(goal: goal, assembledContext: context, recentTraces: recentTraces)
 
         // 1. Decompose goal into action sequence
         let actions = decomposer.decompose(context: planContext)

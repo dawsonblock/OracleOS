@@ -106,7 +106,9 @@ public final class OracleRuntime {
 
         let assembled = contextAssembler.assemble(goal: goal, plan: nil)
 
-        let plan = planner.generate(goal: goal, context: assembled.text)
+        // Inject recent verified traces from the memory graph as planning precedent
+        let recentTraces = memory.recentTraces(limit: 5)
+        let plan = planner.generate(goal: goal, context: assembled.text, recentTraces: recentTraces)
 
         eventBus.emit(.planGenerated(plan))
 
