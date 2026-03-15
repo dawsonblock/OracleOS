@@ -124,6 +124,9 @@ public final class OracleRuntime {
     /// In-memory recipe catalogue.
     public private(set) lazy var recipeStore: RecipeStore = RecipeStore()
 
+    /// Orchestrates architecture governance, dependency analysis, and refactor planning.
+    public private(set) lazy var architectureEngine: ArchitectureEngine = ArchitectureEngine()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -185,7 +188,10 @@ public final class OracleRuntime {
         // 11. Recipe store warm-up
         _ = recipeStore
 
-        // 12. Diagnostics baseline
+        // 12. Architecture engine warm-up
+        _ = architectureEngine
+
+        // 13. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()

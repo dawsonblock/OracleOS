@@ -4524,3 +4524,357 @@ final class RuntimeRecipeWiringTests: XCTestCase {
         XCTAssertTrue(result.success)
     }
 }
+
+// MARK: - 53. Architecture Governance Layer Tests
+
+final class ArchitectureTypesTests: XCTestCase {
+
+    func testRepositoryFileInit() {
+        let f = RepositoryFile(path: "Sources/OracleLib/Core/Foo.swift", isDirectory: false)
+        XCTAssertEqual(f.path, "Sources/OracleLib/Core/Foo.swift")
+        XCTAssertFalse(f.isDirectory)
+        XCTAssertNil(f.lastModifiedAt)
+    }
+
+    func testRepositorySnapshotFromPaths() {
+        let snap = RepositorySnapshot.fromPaths([
+            "Sources/OracleLib/Agent/Planning/Planner.swift",
+            "Sources/OracleLib/Core/Execution/Executor.swift",
+        ])
+        XCTAssertEqual(snap.files.count, 2)
+        XCTAssertFalse(snap.isGitDirty)
+    }
+
+    func testCandidatePatchInit() {
+        let patch = CandidatePatch(workspaceRelativePath: "Sources/OracleLib/Core/Foo.swift", content: "public func foo() {}")
+        XCTAssertEqual(patch.workspaceRelativePath, "Sources/OracleLib/Core/Foo.swift")
+        XCTAssertTrue(patch.content.contains("public"))
+    }
+}
+
+final class GovernanceTests: XCTestCase {
+
+    func testGovernanceRuleIDCases() {
+        XCTAssertEqual(GovernanceRuleID.allCases.count, 5)
+    }
+
+    func testGovernanceReportEmpty() {
+        let report = GovernanceReport.empty
+        XCTAssertTrue(report.violations.isEmpty)
+        XCTAssertFalse(report.isBlocking)
+    }
+
+    func testGovernanceReportHardFailIsBlocking() {
+        let v = GovernanceViolation(ruleID: .executionTruthPath, severity: .hardFail,
+                                    title: "T", summary: "S")
+        let report = GovernanceReport(violations: [v])
+        XCTAssertTrue(report.isBlocking)
+        XCTAssertEqual(report.hardFailures.count, 1)
+        XCTAssertTrue(report.advisories.isEmpty)
+    }
+
+    func testGovernanceViolationAsArchitectureFinding() {
+        let v = GovernanceViolation(ruleID: .reusableKnowledge, severity: .advisory,
+                                    title: "Knowledge drift", summary: "Drift summary")
+        let finding = v.asArchitectureFinding()
+        XCTAssertEqual(finding.severity, .warning)
+        XCTAssertEqual(finding.governanceRuleID, .reusableKnowledge)
+        XCTAssertEqual(finding.riskScore, 0.70, accuracy: 0.001)
+    }
+
+    func testHardFailFindingIsCritical() {
+        let v = GovernanceViolation(ruleID: .hierarchicalPlanning, severity: .hardFail,
+                                    title: "Boundary", summary: "Crossed")
+        let finding = v.asArchitectureFinding()
+        XCTAssertEqual(finding.severity, .critical)
+        XCTAssertEqual(finding.riskScore, 0.95, accuracy: 0.001)
+    }
+}
+
+final class ArchitectureModuleGraphTests: XCTestCase {
+
+    func testModuleNameSourcesFile() {
+        let name = ArchitectureModuleGraph.moduleName(for: "Sources/OracleLib/Agent/Planning/Planner.swift")
+        XCTAssertEqual(name, "Agent/Planning")
+    }
+
+    func testModuleNameCoreSubModule() {
+        let name = ArchitectureModuleGraph.moduleName(for: "Sources/OracleLib/Core/Execution/Executor.swift")
+        XCTAssertEqual(name, "Core/Execution")
+    }
+
+    func testModuleNameRuntimeFile() {
+        let name = ArchitectureModuleGraph.moduleName(for: "Sources/OracleLib/Runtime/OracleRuntime.swift")
+        XCTAssertEqual(name, "Runtime")
+    }
+
+    func testModuleNameTestFile() {
+        let name = ArchitectureModuleGraph.moduleName(for: "Tests/OracleTests/FooTests.swift")
+        XCTAssertEqual(name, "Tests/OracleTests")
+    }
+
+    func testBuildGraphSeeds() {
+        let snap = RepositorySnapshot.fromPaths([
+            "Sources/OracleLib/Agent/Planning/Planner.swift",
+            "Sources/OracleLib/Core/Execution/Executor.swift",
+        ])
+        let graph = ArchitectureModuleGraph.build(from: snap)
+        XCTAssertTrue(graph.modules.keys.contains("Agent/Planning"))
+        XCTAssertTrue(graph.modules.keys.contains("Core/Execution"))
+    }
+}
+
+final class DependencyAnalyzerTests: XCTestCase {
+
+    func testNoCyclesInEmptyGraph() {
+        let graph = ArchitectureModuleGraph(modules: [:])
+        let cycles = DependencyAnalyzer().findCycles(in: graph)
+        XCTAssertTrue(cycles.isEmpty)
+    }
+
+    func testNoCyclesInAcyclicGraph() {
+        let graph = ArchitectureModuleGraph(modules: [
+            "A": ["B"],
+            "B": ["C"],
+            "C": [],
+        ])
+        let cycles = DependencyAnalyzer().findCycles(in: graph)
+        XCTAssertTrue(cycles.isEmpty)
+    }
+
+    func testDetectsCycle() {
+        let graph = ArchitectureModuleGraph(modules: [
+            "A": ["B"],
+            "B": ["C"],
+            "C": ["A"],
+        ])
+        let cycles = DependencyAnalyzer().findCycles(in: graph)
+        XCTAssertFalse(cycles.isEmpty)
+    }
+
+    func testFindingsReturnedForCycle() {
+        let graph = ArchitectureModuleGraph(modules: ["X": ["Y"], "Y": ["X"]])
+        let findings = DependencyAnalyzer().findings(in: graph)
+        XCTAssertFalse(findings.isEmpty)
+        XCTAssertEqual(findings.first?.severity, .warning)
+    }
+}
+
+final class ChangeImpactAnalyzerTests: XCTestCase {
+
+    let analyzer = ChangeImpactAnalyzer()
+
+    func testAffectedModulesDeduplicates() {
+        let modules = analyzer.affectedModules(for: [
+            "Sources/OracleLib/Agent/Planning/A.swift",
+            "Sources/OracleLib/Agent/Planning/B.swift",
+        ])
+        XCTAssertEqual(modules, ["Agent/Planning"])
+    }
+
+    func testShouldReviewForRefactorGoal() {
+        XCTAssertTrue(analyzer.shouldReview(goalDescription: "Refactor the planner",
+                                             candidatePaths: ["Sources/OracleLib/Agent/Planning/A.swift"]))
+    }
+
+    func testShouldReviewForMultiModulePaths() {
+        XCTAssertTrue(analyzer.shouldReview(goalDescription: "Fix a bug",
+                                             candidatePaths: [
+                                                "Sources/OracleLib/Agent/Planning/A.swift",
+                                                "Sources/OracleLib/Core/Execution/B.swift",
+                                             ]))
+    }
+
+    func testShouldNotReviewForSingleModule() {
+        XCTAssertFalse(analyzer.shouldReview(goalDescription: "Fix a bug",
+                                              candidatePaths: ["Sources/OracleLib/Agent/Planning/A.swift"]))
+    }
+}
+
+final class RefactorPlannerTests: XCTestCase {
+
+    func testReturnsNilForEmptyFindings() {
+        XCTAssertNil(RefactorPlanner().proposal(from: []))
+    }
+
+    func testProposalFromFindings() {
+        let finding = ArchitectureFinding(title: "Cycle", summary: "A→B→A", severity: .warning,
+                                          affectedModules: ["A", "B"], riskScore: 0.75)
+        let proposal = RefactorPlanner().proposal(from: [finding])
+        XCTAssertNotNil(proposal)
+        XCTAssertFalse(proposal!.steps.isEmpty)
+        XCTAssertEqual(proposal!.riskScore, 0.75, accuracy: 0.001)
+    }
+}
+
+final class InvariantCheckerTests: XCTestCase {
+
+    let checker = InvariantChecker()
+    let snap = RepositorySnapshot.fromPaths(["Sources/OracleLib/Agent/Planning/Planner.swift"])
+
+    func testNonImpactfulChangeNoViolations() {
+        // No trigger words, single module → no review needed
+        let report = checker.report(
+            goalDescription: "Fix typo",
+            affectedModules: ["Agent/Planning"],
+            candidatePaths: ["Sources/OracleLib/Agent/Planning/Planner.swift"],
+            snapshot: snap
+        )
+        XCTAssertTrue(report.violations.isEmpty)
+    }
+
+    func testPlanningExecutionBoundaryDrift() {
+        let report = checker.report(
+            goalDescription: "Refactor planning",
+            affectedModules: ["Agent/Planning", "Core/Execution"],
+            candidatePaths: [
+                "Sources/OracleLib/Agent/Planning/Planner.swift",
+                "Sources/OracleLib/Core/Execution/Executor.swift",
+                "Tests/OracleTests/PlannerTests.swift",
+            ],
+            snapshot: snap
+        )
+        let ruleIDs = report.violations.map(\.ruleID)
+        XCTAssertTrue(ruleIDs.contains(.hierarchicalPlanning))
+    }
+
+    func testRecoveryPathDriftAdvisory() {
+        // Agent/Recovery only — no Runtime or Graph in scope → advisory
+        let report = checker.report(
+            goalDescription: "Fix recovery handler",
+            affectedModules: ["Agent/Recovery"],
+            candidatePaths: ["Sources/OracleLib/Agent/Recovery/Handler.swift"],
+            snapshot: snap
+        )
+        let advisories = report.advisories.map(\.ruleID)
+        XCTAssertTrue(advisories.contains(.recoveryMode))
+    }
+
+    func testEvalBeforeGrowthHardFail() {
+        // Multi-module (triggers shouldReview), no Tests/ path → hard fail
+        let report = checker.report(
+            goalDescription: "Refactor architecture boundary",
+            affectedModules: ["Agent/Planning", "Core/Execution"],
+            candidatePaths: [
+                "Sources/OracleLib/Agent/Planning/Planner.swift",
+                "Sources/OracleLib/Core/Execution/Executor.swift",
+            ],
+            snapshot: snap
+        )
+        let ruleIDs = report.violations.map(\.ruleID)
+        XCTAssertTrue(ruleIDs.contains(.evalBeforeGrowth))
+        let evalViolation = report.violations.first(where: { $0.ruleID == .evalBeforeGrowth })
+        XCTAssertEqual(evalViolation?.severity, .hardFail)
+    }
+}
+
+final class ArchitectureEngineTests: XCTestCase {
+
+    let engine = ArchitectureEngine()
+
+    func testLowImpactChangeNotTriggered() {
+        let snap = RepositorySnapshot.fromPaths(["Sources/OracleLib/Agent/Planning/Planner.swift"])
+        let review = engine.review(
+            goalDescription: "Fix typo in comment",
+            snapshot: snap,
+            candidatePaths: ["Sources/OracleLib/Agent/Planning/Planner.swift"]
+        )
+        XCTAssertFalse(review.triggered)
+        XCTAssertTrue(review.findings.isEmpty)
+        XCTAssertEqual(review.riskScore, 0)
+    }
+
+    func testHighImpactRefactorTriggered() {
+        let snap = RepositorySnapshot.fromPaths([
+            "Sources/OracleLib/Agent/Planning/Planner.swift",
+            "Sources/OracleLib/Core/Execution/Executor.swift",
+        ])
+        let review = engine.review(
+            goalDescription: "Refactor architecture boundary",
+            snapshot: snap,
+            candidatePaths: [
+                "Sources/OracleLib/Agent/Planning/Planner.swift",
+                "Sources/OracleLib/Core/Execution/Executor.swift",
+            ]
+        )
+        XCTAssertTrue(review.triggered)
+        XCTAssertFalse(review.findings.isEmpty)
+        XCTAssertGreaterThan(review.riskScore, 0)
+    }
+
+    func testReviewSortsFindingsByRiskDescending() {
+        let snap = RepositorySnapshot.fromPaths([
+            "Sources/OracleLib/Agent/Planning/Planner.swift",
+            "Sources/OracleLib/Core/Execution/Executor.swift",
+        ])
+        let review = engine.review(
+            goalDescription: "Refactor execution boundary",
+            snapshot: snap,
+            candidatePaths: [
+                "Sources/OracleLib/Agent/Planning/Planner.swift",
+                "Sources/OracleLib/Core/Execution/Executor.swift",
+                "Tests/OracleTests/Foo.swift",
+            ]
+        )
+        if review.findings.count > 1 {
+            let scores = review.findings.map(\.riskScore)
+            XCTAssertEqual(scores, scores.sorted(by: >))
+        }
+    }
+
+    func testCandidatePatchHeuristicPublicInterface() {
+        let snap = RepositorySnapshot.fromPaths(["Sources/OracleLib/Core/Foo.swift"])
+        let patch = CandidatePatch(
+            workspaceRelativePath: "Sources/OracleLib/Core/Foo.swift",
+            content: "public func doSomething() { }"
+        )
+        let review = engine.reviewCandidatePatch(
+            goalDescription: "Fix broken logic",
+            snapshot: snap,
+            candidate: patch,
+            diffSummary: "Sources/OracleLib/Core/Foo.swift | 1 +"
+        )
+        // Public interface change in a non-refactor task → heuristic warning
+        let publicInterfaceFindings = review.findings.filter { $0.title == "Public interface change" }
+        XCTAssertFalse(publicInterfaceFindings.isEmpty)
+    }
+
+    func testCandidatePatchPlannerExecutionBoundary() {
+        let snap = RepositorySnapshot.fromPaths(["Sources/OracleLib/Agent/Planning/Planner.swift"])
+        let patch = CandidatePatch(
+            workspaceRelativePath: "Sources/OracleLib/Agent/Planning/Planner.swift",
+            content: "func run() { execute(intent) }"
+        )
+        let review = engine.reviewCandidatePatch(
+            goalDescription: "Update planner",
+            snapshot: snap,
+            candidate: patch,
+            diffSummary: "Sources/OracleLib/Agent/Planning/Planner.swift | 1 +"
+        )
+        let driftFindings = review.findings.filter { $0.title == "Planner/execution boundary drift" }
+        XCTAssertFalse(driftFindings.isEmpty)
+        XCTAssertEqual(driftFindings.first?.severity, .critical)
+    }
+}
+
+final class RuntimeArchitectureWiringTests: XCTestCase {
+
+    func testRuntimeHasArchitectureEngine() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.architectureEngine)
+    }
+
+    func testArchitectureEngineCanReview() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let snap = RepositorySnapshot.fromPaths(["Sources/OracleLib/Agent/Planning/Planner.swift"])
+        let review = runtime.architectureEngine.review(
+            goalDescription: "Fix typo",
+            snapshot: snap,
+            candidatePaths: ["Sources/OracleLib/Agent/Planning/Planner.swift"]
+        )
+        XCTAssertNotNil(review)
+        XCTAssertFalse(review.triggered)
+    }
+}
