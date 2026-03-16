@@ -6107,3 +6107,241 @@ final class RuntimeReasoningWiringTests: XCTestCase {
         }
     }
 }
+
+// MARK: - 56. Common + CodeExecution + Engineering + Actions Tests
+
+@MainActor
+final class CommonLayerTests: XCTestCase {
+
+    func testToolResultToDictIncludesFields() {
+        let result = ToolResult(
+            success: true,
+            data: ["value": 1],
+            suggestion: "next",
+            context: ContextInfo(app: "Xcode", window: "Editor")
+        )
+        let dict = result.toDict()
+        XCTAssertEqual(dict["success"] as? Bool, true)
+        XCTAssertEqual((dict["data"] as? [String: Int])?["value"], 1)
+        XCTAssertEqual(dict["suggestion"] as? String, "next")
+        XCTAssertNotNil(dict["context"])
+    }
+
+    func testContextInfoToDictUsesFocusedElementKey() {
+        let ctx = ContextInfo(app: "Safari", window: "Tab", focusedElement: "Search", url: "https://example.com")
+        let dict = ctx.toDict()
+        XCTAssertEqual(dict["focused_element"] as? String, "Search")
+        XCTAssertEqual(dict["url"] as? String, "https://example.com")
+    }
+
+    func testOracleErrorLocalizedDescriptions() {
+        XCTAssertTrue(OracleError.timeout(seconds: 5).localizedDescription.contains("5"))
+        XCTAssertTrue(OracleError.appNotFound(name: "GhostApp").localizedDescription.contains("GhostApp"))
+    }
+
+    func testLocatorBuilderPrefersDomID() {
+        let locator = LocatorBuilder.build(query: "Send", role: "AXButton", domId: "send-button")
+        XCTAssertEqual(locator.criteria.count, 1)
+        XCTAssertEqual(locator.criteria.first?.attribute, "AXDOMIdentifier")
+        XCTAssertNil(locator.computedNameContains)
+    }
+
+    func testLocatorBuilderIncludesRoleAndQuery() {
+        let locator = LocatorBuilder.build(query: "Send", role: "AXButton")
+        XCTAssertEqual(locator.criteria.first?.attribute, "AXRole")
+        XCTAssertEqual(locator.computedNameContains, "Send")
+    }
+
+    func testLogMinimumLevelRoundTrip() {
+        let previous = Log.minimumLevel
+        Log.minimumLevel = .debug
+        XCTAssertEqual(Log.minimumLevel, .debug)
+        Log.minimumLevel = previous
+    }
+
+    func testOracleProductPathsOverrideUsesEnvironment() {
+        let override = "/tmp/oracle-test-data-root"
+        setenv("ORACLE_OS_DATA_ROOT", override, 1)
+        defer { unsetenv("ORACLE_OS_DATA_ROOT") }
+        XCTAssertEqual(OracleProductPaths.dataRootDirectory.path, override)
+    }
+}
+
+final class CodeExecutionLayerTests: XCTestCase {
+
+    private func makeTempDirectory() throws -> URL {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base
+    }
+
+    func testCodeCommandCategoryFlags() {
+        XCTAssertTrue(CodeCommandCategory.generatePatch.isWrite)
+        XCTAssertTrue(CodeCommandCategory.gitPush.isGit)
+        XCTAssertFalse(CodeCommandCategory.test.isGit)
+    }
+
+    func testCommandSpecDefaultsMutatesWorkspaceFromCategory() {
+        let spec = CommandSpec(
+            category: .generatePatch,
+            executable: "/usr/bin/env",
+            arguments: ["true"],
+            workspaceRoot: "/tmp",
+            summary: "noop"
+        )
+        XCTAssertTrue(spec.mutatesWorkspace)
+    }
+
+    func testBuildToolDetectorDetectsSwiftPackage() throws {
+        let root = try makeTempDirectory()
+        FileManager.default.createFile(atPath: root.appendingPathComponent("Package.swift").path, contents: Data())
+        XCTAssertEqual(BuildToolDetector.detect(at: root), .swiftPackage)
+    }
+
+    func testBuildToolDetectorDetectsNPM() throws {
+        let root = try makeTempDirectory()
+        FileManager.default.createFile(atPath: root.appendingPathComponent("package.json").path, contents: Data())
+        XCTAssertEqual(BuildToolDetector.detect(at: root), .npm)
+    }
+
+    func testDefaultBuildCommandForSwift() throws {
+        let root = try makeTempDirectory()
+        let spec = BuildToolDetector.defaultBuildCommand(for: .swiftPackage, workspaceRoot: root)
+        XCTAssertEqual(spec?.arguments, ["swift", "build"])
+    }
+
+    func testWorkspaceScopeResolveInsideRoot() throws {
+        let root = try makeTempDirectory()
+        let scope = try WorkspaceScope(rootURL: root)
+        let resolved = try scope.resolve(relativePath: "Sources/App/main.swift")
+        XCTAssertEqual(resolved?.path, root.appendingPathComponent("Sources/App/main.swift").path)
+    }
+
+    func testWorkspaceScopeRejectsOutsideRoot() throws {
+        let root = try makeTempDirectory()
+        let scope = try WorkspaceScope(rootURL: root)
+        XCTAssertThrowsError(try scope.resolve(relativePath: "../../etc/passwd"))
+    }
+
+    func testWorkspaceRunnerParseGitSubcommandSkipsGlobalFlags() {
+        let subcommand = WorkspaceRunner.parseGitSubcommand(from: ["-C", "/tmp", "status"])
+        XCTAssertEqual(subcommand, "status")
+    }
+
+    func testWorkspaceRunnerDetectsGitNetworkCommand() throws {
+        let runner = WorkspaceRunner()
+        let spec = CommandSpec(
+            category: .gitPush,
+            executable: "/usr/bin/git",
+            arguments: ["push", "origin", "main"],
+            workspaceRoot: "/tmp",
+            summary: "git push"
+        )
+        XCTAssertTrue(runner.derivedTouchesNetwork(spec))
+    }
+
+    func testWorkspaceRunnerRejectsNetworkGitCommand() throws {
+        let root = try makeTempDirectory()
+        let runner = WorkspaceRunner()
+        let spec = CommandSpec(
+            category: .gitPush,
+            executable: "/usr/bin/git",
+            arguments: ["push", "origin", "main"],
+            workspaceRoot: root.path,
+            summary: "git push"
+        )
+        XCTAssertThrowsError(try runner.execute(spec: spec))
+    }
+
+    func testWorkspaceRunnerExecutesAllowedCommand() throws {
+        let root = try makeTempDirectory()
+        let runner = WorkspaceRunner()
+        let spec = CommandSpec(
+            category: .build,
+            executable: "/usr/bin/env",
+            arguments: ["true"],
+            workspaceRoot: root.path,
+            summary: "true"
+        )
+        let result = try runner.execute(spec: spec)
+        XCTAssertTrue(result.succeeded)
+        XCTAssertEqual(result.exitCode, 0)
+    }
+}
+
+final class EngineeringLayerTests: XCTestCase {
+
+    func testRepairPipelineInvariantHelpers() {
+        XCTAssertTrue(RepairPipeline.localizationPrecedesPatching([.failure, .localization, .patchCandidates]))
+        XCTAssertTrue(RepairPipeline.sandboxPrecedesApply([.failure, .sandboxValidation, .apply]))
+        XCTAssertFalse(RepairPipeline.sandboxPrecedesApply([.failure, .apply]))
+    }
+
+    func testPatchPipelineLocalizationFailureWhenSnapshotEmpty() {
+        let pipeline = PatchPipeline()
+        let result = pipeline.run(failureDescription: "nil optional crash", snapshot: RepositorySnapshot())
+        XCTAssertEqual(result.outcome, .localizationFailed)
+        XCTAssertTrue(result.candidates.isEmpty)
+    }
+
+    func testPatchPipelineAppliesBestPatch() {
+        let pipeline = PatchPipeline()
+        let snapshot = RepositorySnapshot(
+            workspaceRoot: "/tmp",
+            files: [RepositoryFile(path: "Sources/App/main.swift", isDirectory: false)],
+            dependencyGraph: ArchitectureDependencyGraph(edges: [ArchitectureDependencyEdge(sourcePath: "Sources/App/main.swift", dependency: "Foundation")])
+        )
+        let result = pipeline.run(failureDescription: "Sources/App/main.swift nil optional", snapshot: snapshot)
+        XCTAssertNotNil(result.applied)
+        XCTAssertTrue(result.completedStages.contains(.apply))
+    }
+
+    func testPatchPipelineRanksByDependencyImpact() {
+        let light = RankedPatch(workspaceRelativePath: "a.swift", proposedContent: "", testsFixed: 1, regressions: 0, dependencyImpact: 0, origin: "a")
+        let heavy = RankedPatch(workspaceRelativePath: "b.swift", proposedContent: "", testsFixed: 1, regressions: 0, dependencyImpact: 2, origin: "b")
+        XCTAssertGreaterThan(light.rank, heavy.rank)
+    }
+
+    func testDefaultSandboxEvaluatorRejectsUnbalancedBraces() {
+        let snapshot = RepositorySnapshot()
+        let eval = PatchPipeline.defaultEvaluator("f.swift", "{", snapshot)
+        XCTAssertFalse(eval.compiled)
+    }
+
+    func testDefaultSandboxEvaluatorRewardsGuardFix() {
+        let snapshot = RepositorySnapshot()
+        let eval = PatchPipeline.defaultEvaluator("f.swift", "guard let value = optional else { return }", snapshot)
+        XCTAssertTrue(eval.compiled)
+        XCTAssertEqual(eval.testsFixed, 1)
+    }
+}
+
+@MainActor
+final class ActionsCompatibilityLayerTests: XCTestCase {
+
+    func testFocusManagerMissingAppFails() {
+        let result = FocusManager.focus(appName: "DefinitelyMissingApp-OracleTests")
+        XCTAssertFalse(result.success)
+    }
+
+    func testActionsClickRequiresSelectorOrCoordinates() {
+        let result = Actions.click(query: nil, role: nil, domId: nil, appName: nil, x: nil, y: nil, button: nil, count: nil)
+        XCTAssertFalse(result.success)
+    }
+
+    func testActionsTypeRequiresFieldSelector() {
+        let result = Actions.typeText(text: "hello", into: nil, domId: nil, appName: nil, clear: false)
+        XCTAssertFalse(result.success)
+        XCTAssertNotNil(result.error)
+    }
+
+    func testActionsOpenApplicationMissingAppFails() {
+        let result = Actions.openApplication(appName: "DefinitelyMissingApp-OracleTests")
+        XCTAssertFalse(result.success)
+    }
+
+    func testFocusManagerWithFocusRestoreReturnsValue() throws {
+        let value = try FocusManager.withFocusRestore { 42 }
+        XCTAssertEqual(value, 42)
+    }
+}

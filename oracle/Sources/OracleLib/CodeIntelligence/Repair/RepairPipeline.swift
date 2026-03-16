@@ -13,6 +13,17 @@ import Foundation
 
 public final class RepairPipeline {
 
+    public enum Stage: String, CaseIterable, Sendable {
+        case failure
+        case localization
+        case candidateSymbols = "candidate_symbols"
+        case patchCandidates = "patch_candidates"
+        case sandboxValidation = "sandbox_validation"
+        case regressionCheck = "regression_check"
+        case rankFix = "rank_fix"
+        case apply
+    }
+
     private let targetSelector: PatchTargetSelector
     private let patchGenerator: PatchGenerator
 
@@ -22,6 +33,18 @@ public final class RepairPipeline {
     ) {
         self.targetSelector = targetSelector
         self.patchGenerator = patchGenerator
+    }
+
+    public static func localizationPrecedesPatching(_ stages: [Stage]) -> Bool {
+        guard let localizationIndex = stages.firstIndex(of: .localization) else { return false }
+        guard let patchIndex = stages.firstIndex(of: .patchCandidates) else { return true }
+        return localizationIndex < patchIndex
+    }
+
+    public static func sandboxPrecedesApply(_ stages: [Stage]) -> Bool {
+        guard let applyIndex = stages.firstIndex(of: .apply) else { return true }
+        guard let sandboxIndex = stages.firstIndex(of: .sandboxValidation) else { return false }
+        return sandboxIndex < applyIndex
     }
 
     public func repair(failure: String, workspace: String) -> RepairResult {

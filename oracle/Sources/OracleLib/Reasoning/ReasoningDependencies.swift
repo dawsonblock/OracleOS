@@ -98,14 +98,43 @@ public struct ElementQuery: Sendable {
 
 /// Category for code/engineering commands.
 public enum CodeCommandCategory: String, Codable, Sendable, CaseIterable {
+    case indexRepository = "index_repository"
+    case searchCode = "search_code"
+    case openFile = "open_file"
     case test
     case build
     case editFile = "edit_file"
+    case writeFile = "write_file"
     case generatePatch = "generate_patch"
+    case formatter
+    case linter
+    case parseBuildFailure = "parse_build_failure"
+    case parseTestFailure = "parse_test_failure"
     case gitStatus = "git_status"
+    case gitBranch = "git_branch"
+    case gitCommit = "git_commit"
+    case gitPush = "git_push"
     case search
     case lint
     case format
+
+    public var isWrite: Bool {
+        switch self {
+        case .editFile, .writeFile, .generatePatch, .formatter, .gitBranch, .gitCommit, .gitPush:
+            true
+        default:
+            false
+        }
+    }
+
+    public var isGit: Bool {
+        switch self {
+        case .gitStatus, .gitBranch, .gitCommit, .gitPush:
+            true
+        default:
+            false
+        }
+    }
 }
 
 // MARK: - WorldState
