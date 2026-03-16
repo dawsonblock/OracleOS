@@ -11,7 +11,7 @@ import Foundation
 // MARK: – AgentKind
 
 /// The kind of task the agent is performing.
-public enum AgentKind: String {
+public enum AgentKind: String, Codable, Sendable {
     /// macOS UI interaction — AX tree, clicks, keyboard.
     case ui
     /// Code editing, builds, tests, git.

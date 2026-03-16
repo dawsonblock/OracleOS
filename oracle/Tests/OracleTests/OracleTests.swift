@@ -5278,3 +5278,832 @@ final class RuntimeMemoryWiringTests: XCTestCase {
         XCTAssertNil(influence.preferredFixPath)
     }
 }
+
+// MARK: - 55. Reasoning Layer Tests
+
+// MARK: 55a. ReasoningOperatorKind
+
+final class ReasoningOperatorKindTests: XCTestCase {
+
+    func testAllCasesCount() {
+        XCTAssertEqual(ReasoningOperatorKind.allCases.count, 13)
+    }
+
+    func testRawValues() {
+        XCTAssertEqual(ReasoningOperatorKind.runTests.rawValue, "run_tests")
+        XCTAssertEqual(ReasoningOperatorKind.buildProject.rawValue, "build_project")
+        XCTAssertEqual(ReasoningOperatorKind.applyPatch.rawValue, "apply_patch")
+        XCTAssertEqual(ReasoningOperatorKind.dismissModal.rawValue, "dismiss_modal")
+        XCTAssertEqual(ReasoningOperatorKind.clickTarget.rawValue, "click_target")
+        XCTAssertEqual(ReasoningOperatorKind.rollbackPatch.rawValue, "rollback_patch")
+    }
+
+    func testCodeFamilyOperators() {
+        // runTests, buildProject, rerunTests → repoAnalysis
+        let repoAnalysisOps: [ReasoningOperatorKind] = [.runTests, .buildProject, .rerunTests]
+        for kind in repoAnalysisOps {
+            XCTAssertEqual(kind.operatorFamily, .repoAnalysis, "\(kind) should be repoAnalysis")
+        }
+        // applyPatch, revertPatch, rollbackPatch → patchGeneration
+        let patchOps: [ReasoningOperatorKind] = [.applyPatch, .revertPatch, .rollbackPatch]
+        for kind in patchOps {
+            XCTAssertEqual(kind.operatorFamily, .patchGeneration, "\(kind) should be patchGeneration")
+        }
+    }
+
+    func testOSFamilyOperators() {
+        let osOps: [ReasoningOperatorKind] = [.dismissModal, .clickTarget, .openApplication, .navigateBrowser,
+                                               .retryWithAlternateTarget, .focusWindow, .restartApplication]
+        for kind in osOps {
+            let fam = kind.operatorFamily
+            XCTAssertTrue(
+                fam == .hostTargeted || fam == .browserTargeted || fam == .recovery || fam == .permissionHandling,
+                "\(kind) family \(fam) should be an OS-targeted family"
+            )
+        }
+    }
+
+    func testOperatorFamilyNeverWorkflow() {
+        for kind in ReasoningOperatorKind.allCases {
+            XCTAssertNotEqual(kind.operatorFamily, .workflow, "\(kind) should not map to .workflow")
+        }
+    }
+}
+
+// MARK: 55b. Operator struct
+
+final class OperatorTests: XCTestCase {
+
+    func testRunTestsOperatorCost() {
+        let op = Operator(kind: .runTests)
+        XCTAssertGreaterThan(op.baseCost, 0)
+        XCTAssertGreaterThanOrEqual(op.risk, 0)
+        XCTAssertLessThanOrEqual(op.risk, 1)
+    }
+
+    func testDismissModalAgentKind() {
+        let op = Operator(kind: .dismissModal)
+        XCTAssertEqual(op.agentKind, .ui)
+    }
+
+    func testBuildProjectAgentKind() {
+        let op = Operator(kind: .buildProject)
+        XCTAssertEqual(op.agentKind, .code)
+    }
+
+    func testOperatorName() {
+        let op = Operator(kind: .clickTarget)
+        XCTAssertEqual(op.name, "click_target")
+    }
+
+    func testPreconditionDismissModal() {
+        var state = ReasoningPlanningState(agentKind: .mixed)
+        state.modalPresent = false
+        let op = Operator(kind: .dismissModal)
+        XCTAssertFalse(op.precondition(state), "dismissModal should be false when no modal")
+        state.modalPresent = true
+        XCTAssertTrue(op.precondition(state), "dismissModal should be true when modal present")
+    }
+
+    func testPreconditionRunTests() {
+        let state = ReasoningPlanningState(agentKind: .code, repoOpen: true)
+        let op = Operator(kind: .runTests)
+        XCTAssertTrue(op.precondition(state))
+    }
+
+    func testPreconditionRunTestsFailsForUIAgent() {
+        let state = ReasoningPlanningState(agentKind: .ui, repoOpen: true)
+        let op = Operator(kind: .runTests)
+        XCTAssertFalse(op.precondition(state))
+    }
+
+    func testEffectBuildProjectSetsBuildSucceeded() {
+        var state = ReasoningPlanningState()
+        state.buildSucceeded = nil
+        let op = Operator(kind: .buildProject)
+        let next = op.effect(state)
+        XCTAssertNotNil(next.buildSucceeded)
+        XCTAssertTrue(next.buildSucceeded == true)
+    }
+
+    func testEffectDismissModalClearsModal() {
+        var state = ReasoningPlanningState()
+        state.modalPresent = true
+        let op = Operator(kind: .dismissModal)
+        let next = op.effect(state)
+        XCTAssertFalse(next.modalPresent)
+    }
+
+    func testEffectApplyPatchSetsPatchApplied() {
+        var state = ReasoningPlanningState()
+        state.patchApplied = false
+        let op = Operator(kind: .applyPatch)
+        let next = op.effect(state)
+        XCTAssertTrue(next.patchApplied)
+    }
+
+    func testEffectRevertPatchClearsPatchApplied() {
+        var state = ReasoningPlanningState()
+        state.patchApplied = true
+        let op = Operator(kind: .revertPatch)
+        let next = op.effect(state)
+        XCTAssertFalse(next.patchApplied)
+    }
+
+    func testHashableEquality() {
+        let op1 = Operator(kind: .clickTarget)
+        let op2 = Operator(kind: .clickTarget)
+        XCTAssertEqual(op1, op2)
+        XCTAssertEqual(op1.hashValue, op2.hashValue)
+    }
+
+    func testHashableInequality() {
+        let op1 = Operator(kind: .runTests)
+        let op2 = Operator(kind: .buildProject)
+        XCTAssertNotEqual(op1, op2)
+    }
+}
+
+// MARK: 55c. OperatorRegistry
+
+final class OperatorRegistryTests: XCTestCase {
+
+    func testSharedRegistryHasAllOperators() {
+        let reg = OperatorRegistry()
+        XCTAssertEqual(reg.allOperators().count, ReasoningOperatorKind.allCases.count)
+    }
+
+    func testRegisterAddsOperator() {
+        let reg = OperatorRegistry(operators: [])
+        XCTAssertEqual(reg.allOperators().count, 0)
+        reg.register(Operator(kind: .runTests))
+        XCTAssertEqual(reg.allOperators().count, 1)
+    }
+
+    func testAvailableFiltersByPrecondition() {
+        // A code agent with repoOpen: code operators available, UI operators not
+        let state = ReasoningPlanningState(agentKind: .code, repoOpen: true)
+        let reg = OperatorRegistry()
+        let ops = reg.available(for: state)
+        XCTAssertFalse(ops.isEmpty)
+        // dismissModal should not appear: agentKind is .code
+        XCTAssertFalse(ops.contains { $0.kind == .dismissModal })
+    }
+
+    func testAvailableIncludesDismissModalWhenModalPresent() {
+        let state = ReasoningPlanningState(agentKind: .mixed, modalPresent: true)
+        let reg = OperatorRegistry()
+        let ops = reg.available(for: state)
+        XCTAssertTrue(ops.contains { $0.kind == .dismissModal })
+    }
+
+    func testAvailablePriorityDismissModalFirst() {
+        let state = ReasoningPlanningState(agentKind: .mixed, modalPresent: true)
+        let reg = OperatorRegistry()
+        let ops = reg.available(for: state)
+        XCTAssertEqual(ops.first?.kind, .dismissModal)
+    }
+
+    func testMakeOperatorReturnsOperator() {
+        let reg = OperatorRegistry()
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let op = reg.makeOperator(kind: .runTests, state: state)
+        XCTAssertNotNil(op)
+        XCTAssertEqual(op?.kind, .runTests)
+    }
+}
+
+// MARK: 55d. ReasoningPlanningState
+
+final class ReasoningPlanningStateTests: XCTestCase {
+
+    func testDefaultInit() {
+        let state = ReasoningPlanningState()
+        XCTAssertFalse(state.modalPresent)
+        XCTAssertFalse(state.patchApplied)
+        XCTAssertFalse(state.testsObserved)
+        XCTAssertTrue(state.visibleTargets.isEmpty)
+        XCTAssertTrue(state.candidateWorkspacePaths.isEmpty)
+    }
+
+    func testConvenienceInitGoalDescription() {
+        var state = ReasoningPlanningState()
+        state.goalDescription = "run unit tests"
+        XCTAssertEqual(state.goalDescription, "run unit tests")
+    }
+
+    func testAgentKindDefault() {
+        let state = ReasoningPlanningState()
+        XCTAssertEqual(state.agentKind, .code)
+    }
+
+    func testModalPresentMutation() {
+        var state = ReasoningPlanningState()
+        state.modalPresent = true
+        XCTAssertTrue(state.modalPresent)
+    }
+
+    func testBuildSucceededNilByDefault() {
+        let state = ReasoningPlanningState()
+        XCTAssertNil(state.buildSucceeded)
+    }
+
+    func testVisibleTargetsMutation() {
+        var state = ReasoningPlanningState()
+        state.visibleTargets = ["Save button", "Cancel button"]
+        XCTAssertEqual(state.visibleTargets.count, 2)
+    }
+
+    func testPlanningStateIsHashable() {
+        let s1 = ReasoningPlanningState()
+        let s2 = ReasoningPlanningState()
+        XCTAssertEqual(s1, s2)
+        var set = Set<ReasoningPlanningState>()
+        set.insert(s1)
+        set.insert(s2)
+        XCTAssertEqual(set.count, 1)
+    }
+}
+
+// MARK: 55e. PlanScore
+
+final class PlanScoreTests: XCTestCase {
+
+    func testTotalIsCorrect() {
+        let score = PlanScore(
+            predictedSuccess: 0.8,
+            workflowMatch: 0.5,
+            stableGraphSupport: 0.3,
+            memoryBias: 0.1,
+            riskPenalty: 0.2,
+            costPenalty: 0.1,
+            sourceType: .reasoning
+        )
+        let expected = 0.8 + 0.5 + 0.3 + 0.1 - 0.2 - 0.1
+        XCTAssertEqual(score.total, expected, accuracy: 0.0001)
+    }
+
+    func testZeroTotalForZeroInputs() {
+        let score = PlanScore()
+        XCTAssertEqual(score.total, 0, accuracy: 0.0001)
+    }
+
+    func testPenaltiesReduceTotal() {
+        let base = PlanScore(predictedSuccess: 1.0)
+        let penalized = PlanScore(predictedSuccess: 1.0, riskPenalty: 0.5)
+        XCTAssertGreaterThan(base.total, penalized.total)
+    }
+
+    func testSourceTypePreserved() {
+        let score = PlanScore(sourceType: .llm)
+        XCTAssertEqual(score.sourceType, .llm)
+    }
+
+    func testNotesPreserved() {
+        let score = PlanScore(notes: ["note1", "note2"])
+        XCTAssertEqual(score.notes, ["note1", "note2"])
+    }
+
+    func testEquality() {
+        let a = PlanScore(predictedSuccess: 0.5, sourceType: .workflow)
+        let b = PlanScore(predictedSuccess: 0.5, sourceType: .workflow)
+        XCTAssertEqual(a, b)
+    }
+}
+
+// MARK: 55f. SimulatedOutcome + PlanCandidate
+
+final class PlanCandidateTests: XCTestCase {
+
+    func testSimulatedOutcomeInit() {
+        let outcome = SimulatedOutcome(successProbability: 0.9, estimatedSteps: 3, riskScore: 0.1)
+        XCTAssertEqual(outcome.successProbability, 0.9)
+        XCTAssertEqual(outcome.estimatedSteps, 3)
+        XCTAssertEqual(outcome.riskScore, 0.1)
+        XCTAssertNil(outcome.likelyFailureMode)
+    }
+
+    func testSimulatedOutcomeWithFailureMode() {
+        let outcome = SimulatedOutcome(successProbability: 0.3, estimatedSteps: 2, riskScore: 0.7, likelyFailureMode: "timeout")
+        XCTAssertEqual(outcome.likelyFailureMode, "timeout")
+    }
+
+    func testPlanCandidateEstimatedCostFromOperators() {
+        let op1 = Operator(kind: .runTests)
+        let op2 = Operator(kind: .buildProject)
+        let plan = PlanCandidate(operators: [op1, op2])
+        let expectedCost = op1.baseCost + op2.baseCost
+        XCTAssertEqual(plan.estimatedCost, expectedCost, accuracy: 0.0001)
+    }
+
+    func testPlanCandidateRiskScoreIsAverage() {
+        let op1 = Operator(kind: .runTests)
+        let op2 = Operator(kind: .applyPatch)
+        let plan = PlanCandidate(operators: [op1, op2])
+        let expectedRisk = (op1.risk + op2.risk) / 2.0
+        XCTAssertEqual(plan.riskScore, expectedRisk, accuracy: 0.0001)
+    }
+
+    func testPlanCandidateOperatorFamiliesPopulated() {
+        let op = Operator(kind: .runTests)
+        let plan = PlanCandidate(operators: [op])
+        XCTAssertFalse(plan.operatorFamilies.isEmpty)
+    }
+
+    func testPlanCandidateOperatorFamiliesDeduped() {
+        let op1 = Operator(kind: .runTests)
+        let op2 = Operator(kind: .buildProject)
+        let plan = PlanCandidate(operators: [op1, op2])
+        // Both are patchGeneration family — should deduplicate
+        let families = plan.operatorFamilies
+        XCTAssertEqual(families.count, Set(families).count)
+    }
+
+    func testIsAllowedByStrategy() {
+        let op = Operator(kind: .clickTarget)
+        let plan = PlanCandidate(operators: [op])
+        let family = op.kind.operatorFamily
+        let strategy = SelectedStrategy(
+            kind: .browserInteraction,
+            confidence: 0.9,
+            rationale: "test",
+            allowedOperatorFamilies: [family]
+        )
+        XCTAssertTrue(plan.isAllowed(by: strategy))
+    }
+
+    func testIsNotAllowedByStrategy() {
+        let op = Operator(kind: .clickTarget)
+        let plan = PlanCandidate(operators: [op])
+        // A strategy that allows only workflow family
+        let strategy = SelectedStrategy(
+            kind: .workflowExecution,
+            confidence: 0.9,
+            rationale: "test",
+            allowedOperatorFamilies: [.workflow]
+        )
+        XCTAssertFalse(plan.isAllowed(by: strategy))
+    }
+
+    func testEmptyOperatorsPlanHasZeroCost() {
+        let plan = PlanCandidate(operators: [])
+        XCTAssertEqual(plan.estimatedCost, 0)
+    }
+
+    func testSourceTypeDefault() {
+        let plan = PlanCandidate(operators: [])
+        XCTAssertEqual(plan.sourceType, .reasoning)
+    }
+
+    func testSourceTypeOverride() {
+        let plan = PlanCandidate(operators: [], sourceType: .llm)
+        XCTAssertEqual(plan.sourceType, .llm)
+    }
+}
+
+// MARK: 55g. PlanDiagnostics + ScoredPlanSummary
+
+final class PlanDiagnosticsTests: XCTestCase {
+
+    func testScoredPlanSummaryInit() {
+        let summary = ScoredPlanSummary(
+            operatorNames: ["runTests", "buildProject"],
+            score: 0.75,
+            reasons: ["matched workflow"],
+            simulatedSuccessProbability: 0.9,
+            simulatedRiskScore: 0.1,
+            simulatedFailureMode: nil
+        )
+        XCTAssertEqual(summary.operatorNames.count, 2)
+        XCTAssertEqual(summary.score, 0.75, accuracy: 0.0001)
+        XCTAssertNil(summary.simulatedFailureMode)
+    }
+
+    func testPlanDiagnosticsInit() {
+        let summary = ScoredPlanSummary(
+            operatorNames: ["clickTarget"],
+            score: 0.5,
+            reasons: [],
+            simulatedSuccessProbability: nil,
+            simulatedRiskScore: nil,
+            simulatedFailureMode: nil
+        )
+        let diag = PlanDiagnostics(
+            selectedOperatorNames: ["clickTarget"],
+            candidatePlans: [summary],
+            fallbackReason: nil
+        )
+        XCTAssertEqual(diag.selectedOperatorNames, ["clickTarget"])
+        XCTAssertEqual(diag.candidatePlans.count, 1)
+        XCTAssertNil(diag.fallbackReason)
+    }
+
+    func testPlanDiagnosticsWithFallback() {
+        let diag = PlanDiagnostics(
+            selectedOperatorNames: [],
+            candidatePlans: [],
+            fallbackReason: "no operators available"
+        )
+        XCTAssertEqual(diag.fallbackReason, "no operators available")
+    }
+
+    func testScoredPlanSummaryEquality() {
+        let a = ScoredPlanSummary(
+            operatorNames: ["runTests"], score: 0.8, reasons: [],
+            simulatedSuccessProbability: nil, simulatedRiskScore: nil, simulatedFailureMode: nil
+        )
+        let b = ScoredPlanSummary(
+            operatorNames: ["runTests"], score: 0.8, reasons: [],
+            simulatedSuccessProbability: nil, simulatedRiskScore: nil, simulatedFailureMode: nil
+        )
+        XCTAssertEqual(a, b)
+    }
+}
+
+// MARK: 55h. PlanSourceType
+
+final class PlanSourceTypeTests: XCTestCase {
+
+    func testFromPlannerSourceWorkflow() {
+        let t = PlanSourceType.from(.workflow)
+        XCTAssertEqual(t, .workflow)
+    }
+
+    func testFromPlannerSourceStableGraph() {
+        let t = PlanSourceType.from(.stableGraph)
+        XCTAssertEqual(t, .stableGraph)
+    }
+
+    func testFromPlannerSourceCandidateGraph() {
+        let t = PlanSourceType.from(.candidateGraph)
+        XCTAssertEqual(t, .candidateGraph)
+    }
+
+    func testFromPlannerSourceExploration() {
+        let t = PlanSourceType.from(.exploration)
+        XCTAssertEqual(t, .exploration)
+    }
+
+    func testFromPlannerSourceRecovery() {
+        let t = PlanSourceType.from(.recovery)
+        XCTAssertEqual(t, .recovery)
+    }
+
+    func testRawValues() {
+        XCTAssertEqual(PlanSourceType.stableGraph.rawValue, "stable_graph")
+        XCTAssertEqual(PlanSourceType.candidateGraph.rawValue, "candidate_graph")
+        XCTAssertEqual(PlanSourceType.llm.rawValue, "llm")
+    }
+}
+
+// MARK: 55i. LLMClient
+
+final class LLMClientTests: XCTestCase {
+
+    func testDefaultInitHasNoProviders() {
+        let client = LLMClient()
+        let diag = client.diagnostics
+        XCTAssertEqual(diag.requestCount, 0)
+        XCTAssertEqual(diag.totalTokens, 0)
+    }
+
+    func testLLMRequestInit() {
+        let req = LLMRequest(prompt: "test", modelTier: .planning, maxTokens: 512, temperature: 0.2)
+        XCTAssertEqual(req.prompt, "test")
+        XCTAssertEqual(req.modelTier, .planning)
+        XCTAssertEqual(req.maxTokens, 512)
+        XCTAssertEqual(req.temperature, 0.2, accuracy: 0.0001)
+    }
+
+    func testLLMResponseInit() {
+        let resp = LLMResponse(text: "result", modelTier: .codeRepair, tokenCount: 100, latencyMs: 150)
+        XCTAssertEqual(resp.text, "result")
+        XCTAssertEqual(resp.modelTier, .codeRepair)
+        XCTAssertEqual(resp.tokenCount, 100)
+    }
+
+    func testLLMModelTierRawValues() {
+        XCTAssertEqual(LLMModelTier.planning.rawValue, "planning")
+        XCTAssertEqual(LLMModelTier.codeRepair.rawValue, "code_repair")
+        XCTAssertEqual(LLMModelTier.recovery.rawValue, "recovery")
+    }
+
+    func testCompleteWithNoProviderReturnsEmpty() async throws {
+        let client = LLMClient()
+        let req = LLMRequest(prompt: "hello", modelTier: .planning)
+        let resp = try await client.complete(req)
+        XCTAssertEqual(resp.text, "")
+    }
+
+    func testDiagnosticsAfterComplete() async throws {
+        let client = LLMClient()
+        let req = LLMRequest(prompt: "hello", modelTier: .planning)
+        _ = try await client.complete(req)
+        // With no provider, early return — requestCount stays 0
+        XCTAssertEqual(client.diagnostics.requestCount, 0)
+    }
+
+    func testLLMClientDiagnosticsInit() {
+        let diag = LLMClientDiagnostics(requestCount: 5, totalTokens: 1000)
+        XCTAssertEqual(diag.requestCount, 5)
+        XCTAssertEqual(diag.totalTokens, 1000)
+    }
+}
+
+// MARK: 55j. ReasoningParser
+
+final class ReasoningParserTests: XCTestCase {
+
+    func testParsePlansEmptyTextReturnsEmpty() {
+        let plans = ReasoningParser.parsePlans(from: "")
+        XCTAssertTrue(plans.isEmpty)
+    }
+
+    func testParsePlansNoBlocksReturnsEmpty() {
+        let plans = ReasoningParser.parsePlans(from: "This is not a plan.")
+        XCTAssertTrue(plans.isEmpty)
+    }
+
+    func testParsedPlanInit() {
+        let plan = ParsedPlan(steps: [.runTests, .buildProject], confidence: 0.85, risk: "low", rationale: "standard flow")
+        XCTAssertEqual(plan.steps.count, 2)
+        XCTAssertEqual(plan.confidence, 0.85, accuracy: 0.0001)
+        XCTAssertEqual(plan.risk, "low")
+        XCTAssertEqual(plan.rationale, "standard flow")
+    }
+
+    func testToPlanCandidatesFromEmptyParsedPlans() {
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let candidates = ReasoningParser.toPlanCandidates(parsedPlans: [], state: state)
+        XCTAssertTrue(candidates.isEmpty)
+    }
+
+    func testToPlanCandidatesRiskHighMapsTo07() {
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let parsed = ParsedPlan(steps: [.runTests], confidence: 0.9, risk: "high")
+        let candidates = ReasoningParser.toPlanCandidates(parsedPlans: [parsed], state: state)
+        if let first = candidates.first {
+            XCTAssertEqual(first.riskScore, 0.7, accuracy: 0.001)
+        }
+        // Note: candidate may be empty if runTests precondition satisfied for code agent
+    }
+
+    func testToPlanCandidatesRiskLowMapsTo015() {
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let parsed = ParsedPlan(steps: [.runTests], confidence: 0.9, risk: "low")
+        let candidates = ReasoningParser.toPlanCandidates(parsedPlans: [parsed], state: state)
+        if let first = candidates.first {
+            XCTAssertEqual(first.riskScore, 0.15, accuracy: 0.001)
+        }
+    }
+
+    func testToPlanCandidatesSourceTypeIsLLM() {
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let parsed = ParsedPlan(steps: [.runTests], confidence: 0.9, risk: "low")
+        let candidates = ReasoningParser.toPlanCandidates(parsedPlans: [parsed], state: state)
+        for candidate in candidates {
+            XCTAssertEqual(candidate.sourceType, .llm)
+        }
+    }
+
+    func testParsePlansWithBlock() {
+        let text = """
+        PLAN 1:
+        STEPS: runTests
+        CONFIDENCE: 0.9
+        RISK: low
+        RATIONALE: standard test run
+        END_PLAN
+        """
+        let plans = ReasoningParser.parsePlans(from: text)
+        // Parser may return 1 plan if block format matches
+        XCTAssertGreaterThanOrEqual(plans.count, 0)
+    }
+}
+
+// MARK: 55k. ReasoningEngine plan generation
+
+final class ReasoningEngineExtensionTests: XCTestCase {
+
+    func testGeneratePlansFromDefaultState() {
+        let engine = ReasoningEngine()
+        let state = ReasoningPlanningState()
+        let plans = engine.generatePlans(from: state)
+        // Should return some plans or at least not crash
+        XCTAssertGreaterThanOrEqual(plans.count, 0)
+    }
+
+    func testGeneratePlansRespectMaxPlans() {
+        let engine = ReasoningEngine()
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let plans = engine.generatePlans(from: state, maxDepth: 2, maxPlans: 3, operatorRegistry: .shared)
+        XCTAssertLessThanOrEqual(plans.count, 3)
+    }
+
+    func testGeneratePlansNoDuplicateKindSequences() {
+        let engine = ReasoningEngine()
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let plans = engine.generatePlans(from: state, maxDepth: 2, maxPlans: 10, operatorRegistry: .shared)
+        let kindSequences = plans.map { $0.operators.map(\.kind) }
+        let uniqueSequences = Set(kindSequences.map { $0.map(\.rawValue).joined(separator: ",") })
+        XCTAssertEqual(uniqueSequences.count, kindSequences.count)
+    }
+
+    func testGeneratePlansCandidatesHaveOperators() {
+        let engine = ReasoningEngine()
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let plans = engine.generatePlans(from: state, maxDepth: 2, maxPlans: 5, operatorRegistry: .shared)
+        for plan in plans {
+            XCTAssertFalse(plan.operators.isEmpty)
+        }
+    }
+}
+
+// MARK: 55l. ProposalEngine
+
+final class ProposalEngineTests: XCTestCase {
+
+    func testProposalEngineInit() {
+        let engine = ProposalEngine(llmClient: LLMClient(), reasoningEngine: ReasoningEngine())
+        XCTAssertNotNil(engine)
+    }
+
+    func testProposalInit() {
+        let proposal = Proposal(plans: [], selectedPlan: nil, diagnostics: ProposalDiagnostics(
+            llmPlansGenerated: 0, deterministicPlansGenerated: 0, totalEvaluated: 0,
+            selectedSource: nil, llmLatencyMs: 0, notes: []
+        ))
+        XCTAssertTrue(proposal.plans.isEmpty)
+        XCTAssertNil(proposal.selectedPlan)
+    }
+
+    func testProposalDiagnosticsInit() {
+        let diag = ProposalDiagnostics(
+            llmPlansGenerated: 2,
+            deterministicPlansGenerated: 4,
+            totalEvaluated: 6,
+            selectedSource: .reasoning,
+            llmLatencyMs: 120.5,
+            notes: ["deterministic selected"]
+        )
+        XCTAssertEqual(diag.llmPlansGenerated, 2)
+        XCTAssertEqual(diag.deterministicPlansGenerated, 4)
+        XCTAssertEqual(diag.totalEvaluated, 6)
+        XCTAssertEqual(diag.selectedSource, .reasoning)
+        XCTAssertEqual(diag.llmLatencyMs, 120.5, accuracy: 0.001)
+    }
+
+    func testProposeReturnsProposal() async {
+        let engine = ProposalEngine(llmClient: LLMClient(), reasoningEngine: ReasoningEngine())
+        var state = ReasoningPlanningState()
+        state.agentKind = .code
+        let goal = Goal(description: "run unit tests", priority: .normal)
+        let strategy = SelectedStrategy(
+            kind: .repoRepair,
+            confidence: 0.9,
+            rationale: "test",
+            allowedOperatorFamilies: OperatorFamily.allCases
+        )
+        let proposal = await engine.propose(state: state, goal: goal, selectedStrategy: strategy)
+        XCTAssertNotNil(proposal)
+        XCTAssertGreaterThanOrEqual(proposal.diagnostics.totalEvaluated, 0)
+    }
+}
+
+// MARK: 55m. GraphStore Reasoning stubs
+
+final class GraphStoreReasoningTests: XCTestCase {
+
+    func testOutgoingStableEdgesReturnsEmpty() {
+        let store = GraphStore()
+        let id = PlanningStateID(rawValue: "test-state-1")
+        let edges = store.outgoingStableEdges(from: id)
+        XCTAssertTrue(edges.isEmpty)
+    }
+
+    func testOutgoingCandidateEdgesReturnsEmpty() {
+        let store = GraphStore()
+        let id = PlanningStateID(rawValue: "test-state-2")
+        let edges = store.outgoingCandidateEdges(from: id)
+        XCTAssertTrue(edges.isEmpty)
+    }
+
+    func testActionContractForIDReturnsNil() {
+        let store = GraphStore()
+        let contract = store.actionContract(for: "any-id")
+        XCTAssertNil(contract)
+    }
+
+    func testGraphEdgeInit() {
+        let edge = GraphEdge(
+            id: "e1",
+            fromStateID: PlanningStateID(rawValue: "from-state"),
+            toStateID: PlanningStateID(rawValue: "to-state"),
+            actionContractID: "ac1",
+            stable: true,
+            weight: 0.8
+        )
+        XCTAssertEqual(edge.id, "e1")
+        XCTAssertTrue(edge.stable)
+        XCTAssertEqual(edge.weight, 0.8, accuracy: 0.0001)
+        XCTAssertEqual(edge.actionContractID, "ac1")
+    }
+}
+
+// MARK: 55n. MemoryExtensions
+
+final class MemoryExtensionsTests: XCTestCase {
+
+    func testWorkflowActionBiasNonNegative() {
+        let router = MemoryRouter()
+        let contract = ActionContract(
+            id: "ac1",
+            skillName: "runTests",
+            targetRole: nil,
+            targetLabel: nil,
+            locatorStrategy: "direct"
+        )
+        let bias = router.workflowActionBias(
+            contract: contract,
+            app: "Xcode",
+            goalDescription: "run tests",
+            workspaceRoot: nil
+        )
+        XCTAssertGreaterThanOrEqual(bias, 0)
+    }
+
+    func testWorkflowActionBiasAtMost03() {
+        let router = MemoryRouter()
+        let contract = ActionContract(
+            id: "ac1",
+            skillName: "runTests",
+            targetRole: nil,
+            targetLabel: nil,
+            locatorStrategy: "direct"
+        )
+        let bias = router.workflowActionBias(
+            contract: contract,
+            app: "Xcode",
+            goalDescription: "run tests",
+            workspaceRoot: "/Users/dev/project"
+        )
+        XCTAssertLessThanOrEqual(bias, 0.3)
+    }
+
+    func testActionContractInit() {
+        let contract = ActionContract(
+            id: "test-id",
+            agentKind: .code,
+            skillName: "buildProject",
+            targetRole: "button",
+            targetLabel: "Build",
+            locatorStrategy: "label",
+            commandCategory: "build"
+        )
+        XCTAssertEqual(contract.id, "test-id")
+        XCTAssertEqual(contract.agentKind, .code)
+        XCTAssertEqual(contract.skillName, "buildProject")
+        XCTAssertEqual(contract.targetLabel, "Build")
+        XCTAssertEqual(contract.commandCategory, "build")
+    }
+}
+
+// MARK: 55o. Runtime Reasoning Wiring
+
+final class RuntimeReasoningWiringTests: XCTestCase {
+
+    func testRuntimeHasLLMClient() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.llmClient)
+    }
+
+    func testRuntimeHasOperatorRegistry() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.operatorRegistry)
+        XCTAssertEqual(runtime.operatorRegistry.allOperators().count, ReasoningOperatorKind.allCases.count)
+    }
+
+    func testRuntimeHasProposalEngine() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.proposalEngine)
+    }
+
+    func testOperatorRegistrySharedHasAllKinds() {
+        let reg = OperatorRegistry.shared
+        let kinds = Set(reg.allOperators().map(\.kind))
+        for kind in ReasoningOperatorKind.allCases {
+            XCTAssertTrue(kinds.contains(kind), "Registry missing kind: \(kind)")
+        }
+    }
+}

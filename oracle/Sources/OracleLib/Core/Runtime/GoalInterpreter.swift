@@ -10,16 +10,24 @@ public struct Goal {
     public let description: String
     public let priority: GoalPriority
     public let createdAt: Date
+    /// Optional target application name for OS-level goals.
+    public let targetApp: String?
+    /// Optional target URL domain for browser goals.
+    public let targetDomain: String?
 
     public init(
         description: String,
         priority: GoalPriority = .normal,
-        id: String = UUID().uuidString
+        id: String = UUID().uuidString,
+        targetApp: String? = nil,
+        targetDomain: String? = nil
     ) {
         self.id = id
         self.description = description
         self.priority = priority
         self.createdAt = Date()
+        self.targetApp = targetApp
+        self.targetDomain = targetDomain
     }
 }
 

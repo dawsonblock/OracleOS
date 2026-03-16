@@ -130,6 +130,18 @@ public final class OracleRuntime {
     /// Routes memory queries across execution, pattern, and project tiers.
     public private(set) lazy var memoryRouter: MemoryRouter = MemoryRouter()
 
+    /// LLM client for reasoning and proposal generation.
+    public private(set) lazy var llmClient: LLMClient = LLMClient()
+
+    /// Registry of all reasoning operators.
+    public private(set) lazy var operatorRegistry: OperatorRegistry = .shared
+
+    /// Proposes ranked action plans from deterministic and LLM sources.
+    public private(set) lazy var proposalEngine: ProposalEngine = ProposalEngine(
+        llmClient: llmClient,
+        reasoningEngine: ReasoningEngine()
+    )
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -197,7 +209,11 @@ public final class OracleRuntime {
         // 13. Memory router warm-up
         _ = memoryRouter
 
-        // 14. Diagnostics baseline
+        // 14. Reasoning layer warm-up
+        _ = operatorRegistry
+        _ = proposalEngine
+
+        // 15. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()
