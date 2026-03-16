@@ -127,6 +127,9 @@ public final class OracleRuntime {
     /// Orchestrates architecture governance, dependency analysis, and refactor planning.
     public private(set) lazy var architectureEngine: ArchitectureEngine = ArchitectureEngine()
 
+    /// Routes memory queries across execution, pattern, and project tiers.
+    public private(set) lazy var memoryRouter: MemoryRouter = MemoryRouter()
+
     // ── Lazy-init subsystems (depend on other subsystems) ──
 
     private(set) lazy var contextAssembler: ContextAssembler = ContextAssembler(
@@ -191,7 +194,10 @@ public final class OracleRuntime {
         // 12. Architecture engine warm-up
         _ = architectureEngine
 
-        // 13. Diagnostics baseline
+        // 13. Memory router warm-up
+        _ = memoryRouter
+
+        // 14. Diagnostics baseline
         diagnostics.attachMetrics(metrics)
         diagnostics.attachCritic(critic)
         diagnostics.printStatus()

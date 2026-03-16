@@ -4878,3 +4878,403 @@ final class RuntimeArchitectureWiringTests: XCTestCase {
         XCTAssertFalse(review.triggered)
     }
 }
+
+// MARK: - 54. Memory Layer Tests
+
+final class MemoryTierTests: XCTestCase {
+    func testAllCasesExist() {
+        XCTAssertEqual(MemoryTier.allCases.count, 5)
+        XCTAssertTrue(MemoryTier.allCases.contains(.execution))
+        XCTAssertTrue(MemoryTier.allCases.contains(.pattern))
+        XCTAssertTrue(MemoryTier.allCases.contains(.project))
+        XCTAssertTrue(MemoryTier.allCases.contains(.workflow))
+        XCTAssertTrue(MemoryTier.allCases.contains(.residue))
+    }
+
+    func testMemoryEvidenceInit() {
+        let ev = MemoryEvidence(tier: .execution, summary: "test", sourceRefs: ["a"], confidence: 0.8)
+        XCTAssertEqual(ev.tier, .execution)
+        XCTAssertEqual(ev.confidence, 0.8, accuracy: 0.001)
+        XCTAssertEqual(ev.sourceRefs, ["a"])
+    }
+}
+
+final class MemoryDecayPolicyTests: XCTestCase {
+
+    func testFreshDateReturns1() {
+        let now = Date()
+        let recent = now.addingTimeInterval(-60 * 60 * 24)   // 1 day ago
+        let mult = MemoryDecayPolicy.freshnessMultiplier(since: recent, now: now)
+        XCTAssertEqual(mult, 1.0, accuracy: 0.001)
+    }
+
+    func testStaleDateReturns0() {
+        let now = Date()
+        let stale = now.addingTimeInterval(-60 * 60 * 24 * 100)  // 100 days ago
+        let mult = MemoryDecayPolicy.freshnessMultiplier(since: stale, now: now)
+        XCTAssertEqual(mult, 0.0, accuracy: 0.001)
+    }
+
+    func testInterpolatesInMiddle() {
+        let now = Date()
+        // 60 days ago: halfway between 30-day fresh and 90-day stale window
+        let mid = now.addingTimeInterval(-60 * 60 * 24 * 60)
+        let mult = MemoryDecayPolicy.freshnessMultiplier(since: mid, now: now)
+        XCTAssertGreaterThan(mult, 0.0)
+        XCTAssertLessThan(mult, 1.0)
+    }
+}
+
+final class MemoryPromotionPolicyTests: XCTestCase {
+
+    func testBelowMinSuccessesReturnsFalse() {
+        XCTAssertFalse(MemoryPromotionPolicy.allowsDurableBias(successes: 2, failures: 0))
+    }
+
+    func testMinSuccessesNoFailuresReturnsTrue() {
+        XCTAssertTrue(MemoryPromotionPolicy.allowsDurableBias(successes: 3, failures: 0))
+    }
+
+    func testHighFailureRateReturnsFalse() {
+        // 3 successes, 5 failures → failure rate 0.625 > 0.25
+        XCTAssertFalse(MemoryPromotionPolicy.allowsDurableBias(successes: 3, failures: 5))
+    }
+
+    func testLowFailureRateReturnsTrue() {
+        // 10 successes, 2 failures → failure rate 0.167 < 0.25
+        XCTAssertTrue(MemoryPromotionPolicy.allowsDurableBias(successes: 10, failures: 2))
+    }
+
+    func testStrategyReuseAllowedForFreshSuccess() {
+        let record = StrategyRecord(app: "Xcode", strategy: "retry", success: true)
+        XCTAssertTrue(MemoryPromotionPolicy.allowsStrategyReuse(record: record))
+    }
+
+    func testStrategyReuseBlockedForFailure() {
+        let record = StrategyRecord(app: "Xcode", strategy: "retry", success: false)
+        XCTAssertFalse(MemoryPromotionPolicy.allowsStrategyReuse(record: record))
+    }
+}
+
+final class MemoryScorerTests: XCTestCase {
+
+    func testCommandBiasBelowThresholdIsZero() {
+        XCTAssertEqual(MemoryScorer.commandBias(successes: 2, failures: 0), 0.0, accuracy: 0.001)
+    }
+
+    func testCommandBiasWithSufficientSuccesses() {
+        let bias = MemoryScorer.commandBias(successes: 10, failures: 1)
+        XCTAssertGreaterThan(bias, 0)
+        XCTAssertLessThanOrEqual(bias, 0.15)
+    }
+
+    func testPlanBiasEmpty() {
+        let bias = MemoryScorer.planBias(influence: .empty)
+        XCTAssertEqual(bias, 0.0, accuracy: 0.001)
+    }
+
+    func testPlanBiasPositive() {
+        let influence = MemoryInfluence(executionRankingBias: 0.1, commandBias: 0.1, preferredPaths: ["/foo"])
+        let bias = MemoryScorer.planBias(influence: influence)
+        XCTAssertGreaterThan(bias, 0)
+        XCTAssertLessThanOrEqual(bias, 0.3)
+    }
+
+    func testPlanBiasNegativeFromRisk() {
+        let influence = MemoryInfluence(avoidedPaths: ["/bad"], riskPenalty: 0.5)
+        let bias = MemoryScorer.planBias(influence: influence)
+        XCTAssertLessThan(bias, 0)
+        XCTAssertGreaterThanOrEqual(bias, -0.3)
+    }
+
+    func testPlanBiasClampedToRange() {
+        let influence = MemoryInfluence(executionRankingBias: 1.0, commandBias: 1.0,
+                                        preferredFixPath: "/fix", preferredPaths: ["/a"])
+        let bias = MemoryScorer.planBias(influence: influence)
+        XCTAssertLessThanOrEqual(bias, 0.3)
+        XCTAssertGreaterThanOrEqual(bias, -0.3)
+    }
+
+    func testFixPatternScoreBelowThresholdIsZero() {
+        let pattern = FixPattern(errorSignature: "err", workspaceRelativePath: nil,
+                                 commandCategory: "build", successCount: 1, failureCount: 0)
+        XCTAssertEqual(MemoryScorer.fixPatternScore(pattern: pattern), 0.0, accuracy: 0.001)
+    }
+
+    func testFixPatternScoreWithHistory() {
+        let pattern = FixPattern(errorSignature: "err", workspaceRelativePath: "/Sources/Foo.swift",
+                                 commandCategory: "build", successCount: 5, failureCount: 0,
+                                 lastAppliedAt: Date())
+        let score = MemoryScorer.fixPatternScore(pattern: pattern)
+        XCTAssertGreaterThan(score, 0)
+    }
+}
+
+final class MemoryInfluenceTests: XCTestCase {
+
+    func testEmptyInfluenceDefaults() {
+        let inf = MemoryInfluence.empty
+        XCTAssertEqual(inf.executionRankingBias, 0)
+        XCTAssertEqual(inf.commandBias, 0)
+        XCTAssertNil(inf.preferredFixPath)
+        XCTAssertNil(inf.preferredRecoveryStrategy)
+        XCTAssertFalse(inf.shouldPreferExperiments)
+        XCTAssertEqual(inf.riskPenalty, 0)
+        XCTAssertTrue(inf.notes.isEmpty)
+        XCTAssertTrue(inf.evidence.isEmpty)
+    }
+
+    func testProjectMemoryRefsProxy() {
+        let inf = MemoryInfluence()
+        XCTAssertTrue(inf.projectMemoryRefs.isEmpty)
+    }
+}
+
+final class PatternSimilarityTests: XCTestCase {
+
+    func testIdenticalSequencesScore1() {
+        let seq = ["click", "type", "submit"]
+        let sim = PatternSimilarityCalculator.similarity(between: seq, and: seq)
+        XCTAssertEqual(sim.score, 1.0, accuracy: 0.001)
+    }
+
+    func testDisjointSequencesScore0() {
+        let sim = PatternSimilarityCalculator.similarity(between: ["a", "b"], and: ["c", "d"])
+        XCTAssertEqual(sim.score, 0.0, accuracy: 0.001)
+    }
+
+    func testPartialOverlapIsBetween0And1() {
+        let sim = PatternSimilarityCalculator.similarity(between: ["a", "b", "c"], and: ["b", "c", "d"])
+        XCTAssertGreaterThan(sim.score, 0)
+        XCTAssertLessThan(sim.score, 1)
+    }
+
+    func testEmptySequenceReturns0() {
+        let sim = PatternSimilarityCalculator.similarity(between: [], and: ["a"])
+        XCTAssertEqual(sim.score, 0.0, accuracy: 0.001)
+    }
+
+    func testTaskFamilySimilarityIdentical() {
+        let sim = PatternSimilarityCalculator.taskFamilySimilarity(goalA: "fix the login bug", goalB: "fix the login bug")
+        XCTAssertEqual(sim.score, 1.0, accuracy: 0.001)
+        XCTAssertEqual(sim.source, .taskFamily)
+    }
+
+    func testTaskFamilySimilarityNoOverlap() {
+        let sim = PatternSimilarityCalculator.taskFamilySimilarity(goalA: "build project", goalB: "deploy server")
+        XCTAssertEqual(sim.score, 0.0, accuracy: 0.001)
+    }
+}
+
+final class KnownControlTests: XCTestCase {
+
+    func testKnownControlInit() {
+        let control = KnownControl(key: "safari:login", app: "Safari", label: "Login",
+                                   role: "button", elementID: nil, successCount: 5)
+        XCTAssertEqual(control.app, "Safari")
+        XCTAssertEqual(control.successCount, 5)
+        XCTAssertEqual(control.label, "Login")
+    }
+}
+
+final class StrategyRecordTests: XCTestCase {
+
+    func testStrategyRecordSuccess() {
+        let record = StrategyRecord(app: "Xcode", strategy: "retry_with_new_target", success: true)
+        XCTAssertTrue(record.success)
+        XCTAssertEqual(record.app, "Xcode")
+    }
+
+    func testStrategyRecordFailure() {
+        let record = StrategyRecord(app: "Safari", strategy: "dismiss_dialog", success: false)
+        XCTAssertFalse(record.success)
+    }
+}
+
+final class FixPatternTests: XCTestCase {
+
+    func testFixPatternFailureRate() {
+        let p = FixPattern(errorSignature: "sig", workspaceRelativePath: "/Foo.swift",
+                           commandCategory: "build", successCount: 3, failureCount: 1)
+        XCTAssertEqual(p.failureRate, 0.25, accuracy: 0.001)
+    }
+
+    func testFixPatternZeroTotal() {
+        let p = FixPattern(errorSignature: "sig", workspaceRelativePath: nil,
+                           commandCategory: "test", successCount: 0, failureCount: 0)
+        XCTAssertEqual(p.failureRate, 0.0, accuracy: 0.001)
+    }
+}
+
+final class AppMemoryStoreTests: XCTestCase {
+
+    func testRecordAndRetrieveControl() {
+        let store = AppMemoryStore()
+        let control = KnownControl(key: "safari:submit", app: "Safari", label: "Submit",
+                                   role: "button", elementID: nil, successCount: 3)
+        store.recordControl(control)
+        let retrieved = store.preferredKnownControl(label: "Submit", app: "Safari")
+        XCTAssertNotNil(retrieved)
+        XCTAssertEqual(retrieved?.successCount, 3)
+    }
+
+    func testControlSuccessCountAccumulates() {
+        let store = AppMemoryStore()
+        let c1 = KnownControl(key: "safari:ok", app: "Safari", label: "OK", role: nil, elementID: nil, successCount: 2)
+        let c2 = KnownControl(key: "safari:ok", app: "Safari", label: "OK", role: nil, elementID: nil, successCount: 3)
+        store.recordControl(c1)
+        store.recordControl(c2)
+        let retrieved = store.getControl(key: "safari:ok")
+        XCTAssertEqual(retrieved?.successCount, 5)
+    }
+
+    func testRecordAndLatestSuccessfulStrategy() {
+        let store = AppMemoryStore()
+        store.recordStrategy(StrategyRecord(app: "Xcode", strategy: "retry", success: false))
+        store.recordStrategy(StrategyRecord(app: "Xcode", strategy: "refocus", success: true))
+        let latest = store.latestSuccessfulStrategy(app: "Xcode")
+        XCTAssertEqual(latest?.strategy, "refocus")
+    }
+
+    func testFailuresForApp() {
+        let store = AppMemoryStore()
+        XCTAssertTrue(store.failuresForApp("Safari").isEmpty)
+    }
+}
+
+final class ExecutionMemoryStoreTests: XCTestCase {
+
+    func testRankingBiasWithNoControl() {
+        let store = AppMemoryStore()
+        let execStore = ExecutionMemoryStore(store: store)
+        let bias = execStore.rankingBias(label: "Login", app: "Safari")
+        XCTAssertEqual(bias, 0.0, accuracy: 0.001)
+    }
+
+    func testRankingBiasWithSufficientControl() {
+        let store = AppMemoryStore()
+        let control = KnownControl(key: "safari:submit", app: "Safari", label: "Submit",
+                                   role: "button", elementID: nil, successCount: 10, lastUsed: Date())
+        store.recordControl(control)
+        let execStore = ExecutionMemoryStore(store: store)
+        let bias = execStore.rankingBias(label: "Submit", app: "Safari")
+        // 10 successes, 0 failures → passes promotion policy → bias > 0
+        XCTAssertGreaterThan(bias, 0)
+        XCTAssertLessThanOrEqual(bias, 0.15)
+    }
+
+    func testPreferredRecoveryStrategyNilWhenNone() {
+        let store = AppMemoryStore()
+        let execStore = ExecutionMemoryStore(store: store)
+        XCTAssertNil(execStore.preferredRecoveryStrategy(app: "Xcode"))
+    }
+
+    func testPreferredRecoveryStrategyReturnedWhenFresh() {
+        let store = AppMemoryStore()
+        store.recordStrategy(StrategyRecord(app: "Xcode", strategy: "refocus_window", success: true))
+        let execStore = ExecutionMemoryStore(store: store)
+        XCTAssertEqual(execStore.preferredRecoveryStrategy(app: "Xcode"), "refocus_window")
+    }
+}
+
+final class PatternMemoryStoreTests: XCTestCase {
+
+    func testPreferredFixPathNilWhenNoPatterns() {
+        let store = AppMemoryStore()
+        let patternStore = PatternMemoryStore(store: store)
+        XCTAssertNil(patternStore.preferredFixPath(errorSignature: "build failed"))
+    }
+
+    func testCommandBiasZeroWhenNoHistory() {
+        let store = AppMemoryStore()
+        let patternStore = PatternMemoryStore(store: store)
+        XCTAssertEqual(patternStore.commandBias(category: "build", workspaceRoot: "/workspace"), 0.0, accuracy: 0.001)
+    }
+
+    func testCommandBiasZeroForNilCategory() {
+        let store = AppMemoryStore()
+        let patternStore = PatternMemoryStore(store: store)
+        XCTAssertEqual(patternStore.commandBias(category: nil, workspaceRoot: "/workspace"), 0.0, accuracy: 0.001)
+    }
+}
+
+final class MemoryRouterTests: XCTestCase {
+
+    func testInfluenceEmptyWithNoStore() {
+        let router = MemoryRouter()
+        let ctx = MemoryQueryContext(goalDescription: "fix the login bug")
+        let influence = router.influence(for: ctx)
+        XCTAssertEqual(influence.executionRankingBias, 0)
+        XCTAssertEqual(influence.commandBias, 0)
+        XCTAssertNil(influence.preferredFixPath)
+        XCTAssertTrue(influence.notes.isEmpty)
+    }
+
+    func testRankingBiasConvenienceMethod() {
+        let router = MemoryRouter()
+        let bias = router.rankingBias(label: "Submit", app: "Safari")
+        XCTAssertEqual(bias, 0, accuracy: 0.001)
+    }
+
+    func testPreferredRecoveryStrategyNilWithNoStore() {
+        let router = MemoryRouter()
+        XCTAssertNil(router.preferredRecoveryStrategy(app: "Xcode"))
+    }
+
+    func testCommandBiasConvenienceMethod() {
+        let router = MemoryRouter()
+        let bias = router.commandBias(category: "build", workspaceRoot: "/workspace")
+        XCTAssertEqual(bias, 0, accuracy: 0.001)
+    }
+}
+
+final class TraceCompressorTests: XCTestCase {
+
+    func testCompressEmptyReturnsEmpty() {
+        let compressor = TraceCompressor()
+        XCTAssertTrue(compressor.compress(events: []).isEmpty)
+    }
+
+    func testSuccessRateZeroForEmptyPatterns() {
+        let compressor = TraceCompressor()
+        XCTAssertEqual(compressor.successRate(for: []), 0.0, accuracy: 0.001)
+    }
+
+    func testSuccessRateAllSuccess() {
+        let compressor = TraceCompressor()
+        let patterns = [
+            CompressedTracePattern(stateFingerprint: "a", actionName: "click", resultSuccess: true, occurrences: 3),
+            CompressedTracePattern(stateFingerprint: "b", actionName: "type", resultSuccess: true, occurrences: 2),
+        ]
+        XCTAssertEqual(compressor.successRate(for: patterns), 1.0, accuracy: 0.001)
+    }
+
+    func testSuccessRateMixed() {
+        let compressor = TraceCompressor()
+        let patterns = [
+            CompressedTracePattern(stateFingerprint: "a", actionName: "click", resultSuccess: true, occurrences: 3),
+            CompressedTracePattern(stateFingerprint: "b", actionName: "type", resultSuccess: false, occurrences: 1),
+        ]
+        // successRate counts patterns, not occurrences: 1 success / 2 total = 0.5
+        let rate = compressor.successRate(for: patterns)
+        XCTAssertEqual(rate, 0.5, accuracy: 0.001)
+    }
+}
+
+final class RuntimeMemoryWiringTests: XCTestCase {
+
+    func testRuntimeHasMemoryRouter() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        XCTAssertNotNil(runtime.memoryRouter)
+    }
+
+    func testMemoryRouterDeliversEmptyInfluenceByDefault() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let ctx = MemoryQueryContext(goalDescription: "open settings")
+        let influence = runtime.memoryRouter.influence(for: ctx)
+        XCTAssertEqual(influence.executionRankingBias, 0)
+        XCTAssertNil(influence.preferredFixPath)
+    }
+}
