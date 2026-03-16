@@ -6345,3 +6345,112 @@ final class ActionsCompatibilityLayerTests: XCTestCase {
         XCTAssertEqual(value, 42)
     }
 }
+
+final class ProjectMemoryLayerTests: XCTestCase {
+
+    private func makeTempProjectRoot() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    func testProjectMemoryStoreWritesDraft() throws {
+        let root = try makeTempProjectRoot()
+        let store = try ProjectMemoryStore(projectRootURL: root)
+        let ref = try store.writeOpenProblemDraft(
+            title: "Nil crash",
+            summary: "Occurs in parser",
+            knowledgeClass: .reusable,
+            body: "Details"
+        )
+        XCTAssertEqual(ref.kind, .openProblem)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ref.path))
+    }
+
+    func testProjectMemoryIndexerParsesMarkdownRecord() throws {
+        let root = try makeTempProjectRoot()
+        let file = root.appendingPathComponent("record.md")
+        try """
+        # Open Problem: Parser bug
+        id: parser-bug
+        kind: open-problem
+        knowledge_class: reusable
+        status: draft
+        summary: parser issue
+        created_at: 2026-03-15T00:00:00Z
+        updated_at: 2026-03-15T00:00:00Z
+        affected_modules: Parser
+        evidence_refs: trace-1
+        source_trace_ids: trace-1
+
+        ## Details
+        Repro steps.
+        """.write(to: file, atomically: true, encoding: .utf8)
+
+        let record = ProjectMemoryIndexer.parseRecord(fileURL: file)
+        XCTAssertEqual(record?.id, "parser-bug")
+        XCTAssertEqual(record?.kind, .openProblem)
+    }
+
+    func testProjectMemoryQueryReturnsRelevantRecords() throws {
+        let root = try makeTempProjectRoot()
+        let store = try ProjectMemoryStore(projectRootURL: root)
+        _ = try store.writeArchitectureDecisionDraft(
+            title: "Use parser facade",
+            summary: "Keep parsing behind facade",
+            knowledgeClass: .reusable,
+            affectedModules: ["Parser"],
+            body: "Facade details"
+        )
+        store.syncIndex()
+
+        let snapshot = RepositorySnapshot.fromPaths(["Sources/Parser/File.swift"], workspaceRoot: root.path)
+        let refs = ProjectMemoryQuery.relevantRecords(goalDescription: "update parser facade", snapshot: snapshot, store: store)
+        XCTAssertFalse(refs.isEmpty)
+    }
+
+    func testProjectMemoryStoreAllRecordsIncludesDrafts() throws {
+        let root = try makeTempProjectRoot()
+        let store = try ProjectMemoryStore(projectRootURL: root)
+        _ = try store.writeRiskDraft(title: "Migration risk", summary: "Watch API drift", knowledgeClass: .reusable, body: "Risk details")
+        let records = store.allRecords()
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records.first?.kind, .risk)
+    }
+}
+
+final class LearningLayerTests: XCTestCase {
+
+    func testWorkflowParameterKindInferFallsBackToText() {
+        XCTAssertEqual(WorkflowParameterKind.infer(from: "unknown-kind"), .text)
+        XCTAssertEqual(WorkflowParameterKind.infer(from: "url"), .url)
+    }
+
+    func testWorkflowPatternMinerReturnsEmptyForNoEvents() {
+        let miner = WorkflowPatternMiner()
+        XCTAssertTrue(miner.mine(events: []).isEmpty)
+    }
+
+    func testWorkflowPatternMinerGroupsSuccessfulEvents() {
+        let miner = WorkflowPatternMiner()
+        let events = [
+            TraceEvent(action: ActionIntent(type: "browser_click", domain: .browser, parameters: ["selector": "#send"]), outcome: .success, detail: "ok"),
+            TraceEvent(action: ActionIntent(type: "browser_click", domain: .browser, parameters: ["selector": "#send"]), outcome: .success, detail: "ok"),
+            TraceEvent(action: ActionIntent(type: "browser_type", domain: .browser, parameters: ["text": "hello"]), outcome: .failure, detail: "nope"),
+        ]
+        let patterns = miner.mine(events: events)
+        XCTAssertEqual(patterns.count, 1)
+        XCTAssertEqual(patterns.first?.fingerprint, "browser_click|browser")
+        XCTAssertTrue(patterns.first?.reusable ?? false)
+    }
+
+    func testWorkflowPatternMinerPenalizesResidueParameters() {
+        let miner = WorkflowPatternMiner(minimumPlanningStateConsistency: 0.1, minimumParameterConsistency: 0.95)
+        let events = [
+            TraceEvent(action: ActionIntent(type: "write_file", domain: .code, parameters: ["path": "/tmp/sandbox-123/file.swift"]), outcome: .success),
+            TraceEvent(action: ActionIntent(type: "write_file", domain: .code, parameters: ["path": "/tmp/sandbox-456/file.swift"]), outcome: .success),
+        ]
+        let patterns = miner.mine(events: events)
+        XCTAssertEqual(patterns.first?.reusable, false)
+    }
+}
