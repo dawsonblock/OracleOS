@@ -55,12 +55,15 @@ public final class ExecutionCoordinator {
         intent: ActionIntent,
         snapshot: WorldModelSnapshot
     ) -> PreparedAction {
-        // Policy gate first — reject before doing skill work.
-        guard policy.allow(action: intent) else {
+        // Policy evaluation → typed PolicyDecision (never bare Bool).
+        let decision = policy.evaluate(action: intent)
+
+        guard decision.allowed else {
             return PreparedAction(
                 intent: intent,
                 policyAllowed: false,
-                blockReason: "policy denied: \(intent.type)"
+                policyDecision: decision,
+                blockReason: "\(decision.decisionCode): \(decision.reason)"
             )
         }
 
@@ -74,6 +77,7 @@ public final class ExecutionCoordinator {
             return PreparedAction(
                 intent: resolution.intent,
                 policyAllowed: true,
+                policyDecision: decision,
                 skillName: skill.name,
                 confidence: resolution.confidence
             )
@@ -83,6 +87,7 @@ public final class ExecutionCoordinator {
         return PreparedAction(
             intent: intent,
             policyAllowed: true,
+            policyDecision: decision,
             confidence: 1.0
         )
     }
@@ -97,17 +102,21 @@ public final class ExecutionCoordinator {
     /// - Parameter resolution: The already-resolved skill resolution.
     /// - Returns: A `PreparedAction` ready for the executor.
     public func prepare(resolution: SkillResolution) -> PreparedAction {
-        guard policy.allow(action: resolution.intent) else {
+        let decision = policy.evaluate(action: resolution.intent)
+
+        guard decision.allowed else {
             return PreparedAction(
                 intent: resolution.intent,
                 policyAllowed: false,
-                blockReason: "policy denied (resolution): \(resolution.intent.type)"
+                policyDecision: decision,
+                blockReason: "\(decision.decisionCode): \(decision.reason)"
             )
         }
 
         return PreparedAction(
             intent: resolution.intent,
             policyAllowed: true,
+            policyDecision: decision,
             confidence: resolution.confidence
         )
     }

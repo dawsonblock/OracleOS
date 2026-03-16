@@ -105,6 +105,9 @@ public struct StateBundle {
 ///
 /// If `policyAllowed` is false the runtime must not forward the intent
 /// to `VerifiedActionExecutor`. Check `blockReason` for diagnostics.
+///
+/// The full `PolicyDecision` is attached so the executor and trace
+/// can record exactly why this action was allowed / blocked / sandboxed.
 public struct PreparedAction {
 
     /// The final action intent to execute.
@@ -112,6 +115,9 @@ public struct PreparedAction {
 
     /// Whether policy allows execution to proceed.
     public let policyAllowed: Bool
+
+    /// The typed policy decision that produced the above flag.
+    public let policyDecision: PolicyDecision
 
     /// The skill name that resolved this intent, if any.
     public let skillName: String?
@@ -125,12 +131,14 @@ public struct PreparedAction {
     public init(
         intent: ActionIntent,
         policyAllowed: Bool,
+        policyDecision: PolicyDecision = .allow(reason: "default"),
         skillName: String? = nil,
         confidence: Double = 1.0,
         blockReason: String? = nil
     ) {
         self.intent = intent
         self.policyAllowed = policyAllowed
+        self.policyDecision = policyDecision
         self.skillName = skillName
         self.confidence = confidence
         self.blockReason = blockReason

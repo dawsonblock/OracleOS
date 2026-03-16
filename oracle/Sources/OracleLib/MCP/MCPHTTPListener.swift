@@ -187,11 +187,26 @@ public final class MCPHTTPListener: NSObject, StreamDelegate {
 
             let mcpResponse = mcpServer.handleRequest(toolName: toolName, parameters: toolArgs)
 
-            if let intent = mcpResponse.actionIntent {
-                // Route through runtime execution pipeline
-                let result = runtime.executor.execute(action: intent)
-                runtime.memory.record(result: result, forAction: intent)
-                let escaped = result.detail
+            if var intent = mcpResponse.actionIntent {
+                // Tag source surface as MCP
+                intent = ActionIntent(
+                    type: intent.type,
+                    domain: intent.domain,
+                    parameters: intent.parameters,
+                    sourceSurface: .mcp
+                )
+
+                // Route through CommandDispatcher — never call executor directly.
+                // Blueprint ref: Gate 1, §1.6 — "MCP enters through dispatcher"
+                let dispatchResult = runtime.commandDispatcher.submitIntent(intent)
+
+                let detail: String
+                if dispatchResult.accepted {
+                    detail = dispatchResult.reason ?? "accepted via dispatcher"
+                } else {
+                    detail = "rejected: \(dispatchResult.reason ?? "unknown")"
+                }
+                let escaped = detail
                     .replacingOccurrences(of: "\\", with: "\\\\")
                     .replacingOccurrences(of: "\"", with: "\\\"")
                     .replacingOccurrences(of: "\n", with: "\\n")

@@ -17,13 +17,18 @@ public struct ExecutionResult {
     public let preStateHash: String
     public let postStateHash: String
 
+    /// Policy decision code that authorized (or blocked) this action.
+    /// Maps to PolicyDecision.DecisionCode.rawValue.
+    public let policyDecisionCode: String
+
     public init(
         success: Bool,
         detail: String = "",
         executedThroughExecutor: Bool = true,
         actionID: String = "",
         preStateHash: String = "",
-        postStateHash: String = ""
+        postStateHash: String = "",
+        policyDecisionCode: String = "allowed"
     ) {
         self.success = success
         self.detail = detail
@@ -32,6 +37,7 @@ public struct ExecutionResult {
         self.actionID = actionID
         self.preStateHash = preStateHash
         self.postStateHash = postStateHash
+        self.policyDecisionCode = policyDecisionCode
     }
 
     public static func blocked(actionID: String, reason: String) -> ExecutionResult {
@@ -41,7 +47,8 @@ public struct ExecutionResult {
             executedThroughExecutor: false,
             actionID: actionID,
             preStateHash: "",
-            postStateHash: ""
+            postStateHash: "",
+            policyDecisionCode: "blocked"
         )
     }
 }

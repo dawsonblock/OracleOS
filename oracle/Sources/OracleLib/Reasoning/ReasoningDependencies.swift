@@ -117,6 +117,7 @@ public enum CodeCommandCategory: String, Codable, Sendable, CaseIterable {
     case search
     case lint
     case format
+    case custom
 
     public var isWrite: Bool {
         switch self {

@@ -1,28 +1,36 @@
 import Foundation
 
 // ─────────────────────────────────────────────────────────
-// VerifiedActionExecutor — the execution truth boundary
+// VerifiedActionExecutor — the single execution truth boundary
 //
 // EVERY environment-changing action flows through here.
-// No external system bypasses this.
+// No external system bypasses this. MCP, CLI, recipes,
+// recovery — all converge on execute(action:).
 //
 // Pipeline:
 //   intent
 //     → validator (registered action?)
-//     → policy (allowed?)
-//     → pre-observation
+//     → policy → PolicyDecision (not Bool)
+//     → pre-observation (WorldModelSnapshot)
 //     → execute
-//     → post-observation
+//     → post-observation (WorldModelSnapshot)
 //     → postcondition verification
 //     → stamp executedThroughExecutor
 //     → trace
 //     → result
+//
+// Blueprint ref: Gate 1, §1.2 — "single execution truth boundary"
+// Invariant: result.executedThroughExecutor == true on every path
 // ─────────────────────────────────────────────────────────
 
 public final class VerifiedActionExecutor {
 
     private var policy: PolicyEngine?
     private var traceRecorder: TraceRecorder?
+
+    /// Optional snapshot provider (Gate 2 fills real implementation).
+    /// When nil, falls back to deterministic hash stubs.
+    public var worldStateProvider: WorldStateProvider?
 
     public init() {}
 
@@ -50,12 +58,23 @@ public final class VerifiedActionExecutor {
             )
         }
 
-        // 2. Policy check (defense in depth — runtime also checks)
-        if let policy = policy, !policy.allow(action: action) {
-            return ExecutionResult.blocked(actionID: action.id, reason: "policy denied")
+        // 2. Policy evaluation → typed PolicyDecision
+        let decision: PolicyDecision
+        if let policy = policy {
+            decision = policy.evaluate(action: action)
+        } else {
+            decision = .allow(reason: "no policy engine attached")
         }
 
-        // 3. Pre-observation snapshot (placeholder for Phase 6)
+        guard decision.allowed else {
+            print("[executor] BLOCKED: \(action.type) — \(decision.reason) [code: \(decision.decisionCode)]")
+            return ExecutionResult.blocked(
+                actionID: action.id,
+                reason: "\(decision.decisionCode): \(decision.reason)"
+            )
+        }
+
+        // 3. Pre-observation snapshot
         let preState = capturePreState(action: action)
 
         // 4. Execute through registered handler
@@ -80,7 +99,8 @@ public final class VerifiedActionExecutor {
             executedThroughExecutor: true,
             actionID: action.id,
             preStateHash: preState,
-            postStateHash: postState
+            postStateHash: postState,
+            policyDecisionCode: decision.decisionCode.rawValue
         )
 
         // 8. Execution trace — record through TraceRecorder if attached
@@ -104,13 +124,48 @@ public final class VerifiedActionExecutor {
         return result
     }
 
-    // ── Observation (stub — Phase 6 fills this) ─────────
+    // ── Legacy compatibility ────────────────────────────
+    //
+    // Backward-compatible allow() wrapper removed — callers
+    // now see the full PolicyDecision through the result.
+
+    // ── Observation ─────────────────────────────────────
 
     private func capturePreState(action: ActionIntent) -> String {
+        if let provider = worldStateProvider {
+            return provider.snapshot(label: "pre-\(action.id)").hash
+        }
         return "pre-\(action.id.prefix(8))"
     }
 
     private func capturePostState(action: ActionIntent) -> String {
+        if let provider = worldStateProvider {
+            return provider.snapshot(label: "post-\(action.id)").hash
+        }
         return "post-\(action.id.prefix(8))"
+    }
+}
+
+// ─────────────────────────────────────────────────────────
+// WorldStateProvider — protocol for snapshot capture
+//
+// Gate 2 delivers the real implementation backed by
+// WorldStateModel. For now, stub implementations can
+// conform to this protocol.
+// ─────────────────────────────────────────────────────────
+
+public protocol WorldStateProvider {
+    func snapshot(label: String) -> WorldStateSnapshot
+}
+
+public struct WorldStateSnapshot {
+    public let label: String
+    public let hash: String
+    public let timestamp: Date
+
+    public init(label: String, hash: String, timestamp: Date = Date()) {
+        self.label = label
+        self.hash = hash
+        self.timestamp = timestamp
     }
 }

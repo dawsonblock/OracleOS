@@ -149,7 +149,7 @@ public final class WorkspaceRunner: @unchecked Sendable {
         switch spec.category {
         case .build, .test, .formatter, .linter, .gitStatus, .gitBranch, .gitCommit, .gitPush:
             return allowedExecutable(spec.executable)
-        case .indexRepository, .searchCode, .openFile, .editFile, .writeFile, .generatePatch, .parseBuildFailure, .parseTestFailure, .search, .lint, .format:
+        case .indexRepository, .searchCode, .openFile, .editFile, .writeFile, .generatePatch, .parseBuildFailure, .parseTestFailure, .search, .lint, .format, .custom:
             return true
         }
     }

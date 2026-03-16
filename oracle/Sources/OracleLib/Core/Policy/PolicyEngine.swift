@@ -3,10 +3,18 @@ import Foundation
 // ─────────────────────────────────────────────────────────
 // PolicyEngine — gating authority for all actions
 //
-// Controls: filesystem, network, sandbox usage, system APIs,
-// macOS services, browser automation.
+// Evaluates authorization based on:
+//   • action type
+//   • target path / workspace boundary
+//   • domain
+//   • mutation level
+//   • caller surface
+//   • risk level
 //
+// Returns a typed PolicyDecision — never a bare Bool.
 // Ambiguous policy states fail closed.
+//
+// Blueprint ref: Gate 1, §1.3
 // ─────────────────────────────────────────────────────────
 
 public final class PolicyEngine {
@@ -14,43 +22,88 @@ public final class PolicyEngine {
     private var rules: [PolicyRule] = []
     private var allowlist = CapabilityAllowlist()
 
+    /// Workspace root for boundary checks (nil = no workspace constraint).
+    public var workspaceBoundary: String?
+
     public init() {
         loadDefaultRules()
     }
 
-    // ── Core gate ───────────────────────────────────────
+    // ── Core gate (typed) ───────────────────────────────
 
-    public func allow(action: ActionIntent) -> Bool {
+    /// Evaluate full policy for an action. Returns a typed decision.
+    public func evaluate(action: ActionIntent) -> PolicyDecision {
 
-        // Check explicit blocks first
-        for rule in rules {
-            if rule.matches(action: action) {
-                if rule.decision == .block {
-                    print("[policy] Blocked: \(action.type) — rule: \(rule.name)")
-                    return false
-                }
-                if rule.decision == .requireApproval {
-                    print("[policy] Approval required for: \(action.type)")
-                    // Phase 10+: interactive approval gate
-                    return false
+        // 1. Workspace boundary check for write actions
+        if action.requiresMutation, let boundary = workspaceBoundary {
+            if let target = action.targetScope ?? action.parameters["path"] {
+                let resolvedTarget = (target as NSString).standardizingPath
+                let resolvedBoundary = (boundary as NSString).standardizingPath
+                if !resolvedTarget.hasPrefix(resolvedBoundary) {
+                    return .deny(
+                        reason: "write target '\(target)' is outside workspace '\(boundary)'",
+                        code: .outsideWorkspace
+                    )
                 }
             }
         }
 
-        // Check capability allowlist
-        guard allowlist.isAllowed(domain: action.domain) else {
-            print("[policy] Domain not in allowlist: \(action.domain.rawValue)")
-            return false
+        // 2. Explicit rule checks
+        for rule in rules {
+            if rule.matches(action: action) {
+                switch rule.decision {
+                case .block:
+                    return .deny(reason: "rule '\(rule.name)' blocked \(action.type)")
+                case .requireApproval:
+                    if action.approvalToken != nil {
+                        // Approval provided — allow through
+                        break
+                    }
+                    return .pendingApproval(reason: "rule '\(rule.name)' requires approval for \(action.type)")
+                case .allow:
+                    break
+                }
+            }
         }
 
-        return true
+        // 3. Domain allowlist
+        guard allowlist.isAllowed(domain: action.domain) else {
+            return .deny(
+                reason: "domain '\(action.domain.rawValue)' not in capability allowlist",
+                code: .domainDisabled
+            )
+        }
+
+        // 4. Risk evaluation → sandbox routing
+        let riskLevel = RiskEvaluator.evaluate(action: action)
+        if riskLevel >= .elevated {
+            return .sandbox(
+                reason: "risk level \(riskLevel) requires sandbox for \(action.type)",
+                riskLevel: riskLevel
+            )
+        }
+
+        return .allow(reason: "policy passed", riskLevel: riskLevel)
+    }
+
+    // ── Legacy compatibility ────────────────────────────
+    //
+    // Existing consumers that call allow() -> Bool continue
+    // to work. New code should use evaluate() -> PolicyDecision.
+
+    public func allow(action: ActionIntent) -> Bool {
+        let decision = evaluate(action: action)
+        if !decision.allowed {
+            print("[policy] Blocked: \(action.type) — \(decision.reason)")
+        }
+        return decision.allowed
     }
 
     // ── Risk evaluation ─────────────────────────────────
 
     public func requiresSandbox(action: ActionIntent) -> Bool {
-        let riskLevel = RiskEvaluator.evaluate(action: action)
-        return riskLevel >= .elevated
+        let decision = evaluate(action: action)
+        return decision.requiresSandbox
     }
 
     // ── Rule management ─────────────────────────────
@@ -75,6 +128,12 @@ public final class PolicyEngine {
             name: "approval-destructive-file",
             pattern: "delete_file",
             decision: .requireApproval
+        ))
+        // Block free-form shell strings
+        rules.append(PolicyRule(
+            name: "block-arbitrary-shell",
+            pattern: "execute_arbitrary",
+            decision: .block
         ))
     }
 }
@@ -137,7 +196,7 @@ public struct CapabilityAllowlist {
 // RiskEvaluator — score action risk
 // ─────────────────────────────────────────────────────────
 
-public enum RiskLevel: Int, Comparable {
+public enum RiskLevel: Int, Comparable, Sendable {
     case safe = 0
     case low = 1
     case elevated = 2
