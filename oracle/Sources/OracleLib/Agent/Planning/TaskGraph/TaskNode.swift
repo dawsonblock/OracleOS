@@ -18,7 +18,7 @@ import Foundation
 /// can reason about. Raw UI noise (scroll offsets, focus rings,
 /// minor DOM mutations) must **not** produce distinct abstract states.
 /// Only task-meaningful transitions create new nodes.
-public enum AbstractTaskState: String, Hashable, CaseIterable {
+public enum AbstractTaskState: String, Hashable, CaseIterable, Sendable {
 
     // Repository lifecycle
     case repoLoaded         = "repo_loaded"
