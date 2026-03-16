@@ -7,7 +7,7 @@ import Foundation
 // Intents carry typed parameters and a domain tag for routing.
 // ─────────────────────────────────────────────────────────
 
-public enum ActionDomain: String {
+public enum ActionDomain: String, Sendable {
     case system     // internal runtime ops
     case host       // macOS UI control
     case browser    // web automation
@@ -16,7 +16,7 @@ public enum ActionDomain: String {
     case tool       // registered tools (git, shell, etc.)
 }
 
-public struct ActionIntent {
+public struct ActionIntent: Sendable {
 
     public let id: String
     public let type: String

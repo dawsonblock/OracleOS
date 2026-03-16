@@ -11,7 +11,7 @@ import Foundation
 // ─────────────────────────────────────────────────────────
 
 /// Source of a unified element.
-public enum ElementSource: String, Codable {
+public enum ElementSource: String, Codable, Sendable {
     case accessibility  // AX tree
     case dom            // browser DOM
     case vision         // OCR / vision sidecar
@@ -19,7 +19,7 @@ public enum ElementSource: String, Codable {
 }
 
 /// A single UI element fused from AX, DOM, or vision signals.
-public struct UnifiedElement: Equatable, Identifiable {
+public struct UnifiedElement: Equatable, Identifiable, Sendable {
 
     public let id: String
     public let source: ElementSource
@@ -55,7 +55,7 @@ public struct UnifiedElement: Equatable, Identifiable {
 }
 
 /// A complete snapshot of the environment at a point in time.
-public struct Observation {
+public struct Observation: Sendable {
 
     public let timestamp: Date
     public let app: String?

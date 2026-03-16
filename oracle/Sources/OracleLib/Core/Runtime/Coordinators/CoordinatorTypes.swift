@@ -20,6 +20,11 @@ public enum AgentKind: String, Codable, Sendable {
     case mixed
 }
 
+extension AgentKind {
+    /// Reference-compatibility alias for macOS/UI tasks.
+    public static var os: AgentKind { .ui }
+}
+
 // MARK: – TaskContext
 
 /// Immutable context bundle for a single agent task.

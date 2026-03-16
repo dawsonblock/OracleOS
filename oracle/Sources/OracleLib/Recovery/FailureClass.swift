@@ -11,7 +11,7 @@ import Foundation
 ///
 /// Used by `FailureClassifier` to categorise error descriptions
 /// and by `RecoveryStrategyLibrary` to look up applicable strategies.
-public enum FailureClass: String, Codable, CaseIterable, Equatable {
+public enum FailureClass: String, Codable, CaseIterable, Equatable, Sendable {
 
     // ── UI / element failures ────────────────────────────
 

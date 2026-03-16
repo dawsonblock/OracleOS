@@ -6618,3 +6618,133 @@ final class VisionLayerTests: XCTestCase {
         XCTAssertFalse(result.success)
     }
 }
+
+// MARK: 55p. Compatibility Layer Tests
+
+@MainActor
+final class CompatibilityLayerTests: XCTestCase {
+
+    func testAgentKindOSAliasResolvesToUI() {
+        XCTAssertEqual(AgentKind.os, .ui)
+    }
+
+    func testPlanningGraphStoreWrapsEngine() {
+        let store = PlanningGraphStore()
+        let edge = store.addEdge(from: "start", to: "end", actionType: "run_tests", domain: .code)
+        store.recordTraversal(edgeID: edge.id, success: true, cost: 1, latencyMs: 10)
+
+        let actions = store.validActions(for: "start")
+        XCTAssertEqual(actions.count, 1)
+        XCTAssertEqual(actions.first?.actionType, "run_tests")
+        XCTAssertEqual(actions.first?.traversals, 1)
+    }
+
+    func testStateAbstractorMapsRepositoryTestPhase() {
+        let abstractor = StateAbstractor()
+        let state = WorldState(
+            observation: Observation(app: "Xcode"),
+            planningState: PlanningState(
+                id: PlanningStateID(rawValue: "ps1"),
+                clusterKey: StateClusterKey(rawValue: "cluster1"),
+                appID: "Xcode",
+                taskPhase: "test run"
+            ),
+            repositorySnapshot: RepositorySnapshot.fromPaths(["Sources/App.swift"], workspaceRoot: "/tmp")
+        )
+
+        XCTAssertEqual(abstractor.abstractState(from: state), .testsRunning)
+    }
+
+    func testGraphScorerPrefersSuccessfulLowerRiskEdge() {
+        let from = TaskNode(abstractState: .taskStarted)
+        let goodTo = TaskNode(abstractState: .testsPassed)
+        let badTo = TaskNode(abstractState: .testsPassed)
+
+        let good = TaskEdge(fromNodeID: from.id, toNodeID: goodTo.id, action: "run_tests", domain: .code)
+        good.recordSuccess(latencyMs: 10, cost: 1)
+
+        let bad = TaskEdge(fromNodeID: from.id, toNodeID: badTo.id, action: "delete_repo", domain: .host)
+        bad.recordFailure(latencyMs: 10, cost: 4)
+
+        let scorer = GraphScorer()
+        let goal = Goal(description: "make tests pass")
+        let goalState = GraphScorer.goalAbstractState(from: goal)
+
+        XCTAssertGreaterThan(
+            scorer.scoreEdge(good, goalState: goalState, targetState: goodTo.abstractState),
+            scorer.scoreEdge(bad, goalState: goalState, targetState: badTo.abstractState)
+        )
+    }
+
+    func testGraphNavigatorReturnsBestNextEdge() {
+        let graph = TaskGraph()
+        let start = graph.addOrMergeNode(TaskNode(abstractState: .taskStarted))
+        let goodNode = graph.addOrMergeNode(TaskNode(abstractState: .testsPassed))
+        let badNode = graph.addOrMergeNode(TaskNode(abstractState: .buildFailed))
+        graph.setCurrent(start.id)
+
+        let good = graph.addEdge(TaskEdge(fromNodeID: start.id, toNodeID: goodNode.id, action: "run_tests", domain: .code))
+        good.recordSuccess(latencyMs: 10, cost: 1)
+        let bad = graph.addEdge(TaskEdge(fromNodeID: start.id, toNodeID: badNode.id, action: "delete_repo", domain: .host))
+        bad.recordFailure(latencyMs: 10, cost: 5)
+
+        let navigator = GraphNavigator(maxDepth: 1, maxBranching: 2, beamWidth: 2)
+        let best = navigator.bestNextEdge(
+            from: start.id,
+            in: graph,
+            scorer: GraphScorer(),
+            goal: Goal(description: "make tests pass"),
+            allowedFamilies: [.repoAnalysis, .graphEdge]
+        )
+
+        XCTAssertEqual(best?.id, good.id)
+        XCTAssertNotEqual(best?.id, bad.id)
+    }
+
+    func testRuntimeConfigLiveUsesExpectedDirectories() {
+        let config = RuntimeConfig.live()
+        XCTAssertEqual(config.policyMode, .standard)
+        XCTAssertEqual(config.recipesDirectory, OracleProductPaths.recipesDirectory)
+        XCTAssertTrue(config.approvalRequiredSurfaces.contains(.mcp))
+    }
+
+    func testRuntimeContextLiveInitializesRuntime() {
+        let context = RuntimeContext.live()
+        XCTAssertTrue(ActionRegistry.shared.isRegistered("noop"))
+        XCTAssertEqual(context.config.policyMode, .standard)
+    }
+
+    func testRuntimeExecutionDriverUsesExecutorForCodeAction() {
+        let runtime = OracleRuntime()
+        runtime.initialize()
+        let driver = RuntimeExecutionDriver(runtime: runtime)
+        let contract = ActionContract(
+            id: "contract",
+            agentKind: .code,
+            skillName: "noop",
+            targetRole: nil,
+            targetLabel: nil,
+            locatorStrategy: "direct"
+        )
+        let decision = PlannerDecision(actionContract: contract, source: .candidateGraph, plannerFamily: .code)
+
+        let result = driver.execute(
+            intent: ActionIntent(type: "noop", domain: .code),
+            plannerDecision: decision,
+            selectedCandidate: nil
+        )
+
+        XCTAssertTrue(result.success)
+        let plannerFamily = result.data?["planner_family"] as? String
+        XCTAssertEqual(plannerFamily, PlannerFamily.code.rawValue)
+    }
+
+    func testRuntimeLifecycleTracksHeartbeat() async {
+        let approvalStore = ApprovalStore()
+        let lifecycle = RuntimeLifecycle(approvalStore: approvalStore)
+        lifecycle.startControllerHeartbeat(sessionID: "session", intervalSeconds: 1)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        XCTAssertTrue(lifecycle.controllerConnected())
+        lifecycle.stopControllerHeartbeat()
+    }
+}

@@ -46,7 +46,7 @@ public enum StrategyKind: String, Equatable, CaseIterable {
 /// Each `StrategyKind` maps to a bounded set of allowed families via
 /// `StrategyLibrary`. Plan generation filters candidates against this set,
 /// preventing cross-strategy noise.
-public enum OperatorFamily: String, Equatable, CaseIterable {
+public enum OperatorFamily: String, Equatable, CaseIterable, Sendable {
     case workflow
     case graphEdge = "graph_edge"
     case browserTargeted = "browser_targeted"

@@ -9,7 +9,7 @@ import Foundation
 // ─────────────────────────────────────────────────────────
 
 /// Entry point that invoked the agent loop.
-public enum RuntimeSurface: String, Equatable {
+public enum RuntimeSurface: String, Equatable, Hashable, Sendable {
     /// macOS controller app — highest trust (user is present).
     case controller
     /// Model Context Protocol invocation.

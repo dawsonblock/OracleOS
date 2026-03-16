@@ -26,6 +26,10 @@ public enum LoopTerminationReason: String, Equatable {
     case explorationBudgetExceeded
     /// Recovery budget exhausted.
     case recoveryBudgetExhausted
+    /// Approval was not granted within the required window.
+    case approvalTimeout
+    /// Confidence collapsed across repeated failures.
+    case lowConfidenceRepeatedFailure
 }
 
 // MARK: – LoopOutcome
