@@ -5978,28 +5978,111 @@ final class ProposalEngineTests: XCTestCase {
     }
 }
 
-// MARK: 55m. GraphStore Reasoning stubs
+// MARK: 55m. GraphStore Reasoning + Graph Compatibility
 
 final class GraphStoreReasoningTests: XCTestCase {
 
-    func testOutgoingStableEdgesReturnsEmpty() {
-        let store = GraphStore()
-        let id = PlanningStateID(rawValue: "test-state-1")
-        let edges = store.outgoingStableEdges(from: id)
-        XCTAssertTrue(edges.isEmpty)
+    private func makePlanningState(id: String) -> PlanningState {
+        PlanningState(
+            id: PlanningStateID(rawValue: id),
+            clusterKey: StateClusterKey(rawValue: "cluster-\(id)"),
+            appID: "Xcode"
+        )
     }
 
-    func testOutgoingCandidateEdgesReturnsEmpty() {
-        let store = GraphStore()
-        let id = PlanningStateID(rawValue: "test-state-2")
-        let edges = store.outgoingCandidateEdges(from: id)
-        XCTAssertTrue(edges.isEmpty)
+    private func makeActionContract(id: String) -> ActionContract {
+        ActionContract(
+            id: id,
+            agentKind: .code,
+            skillName: "runTests",
+            targetRole: nil,
+            targetLabel: nil,
+            locatorStrategy: "direct",
+            commandCategory: CodeCommandCategory.test.rawValue,
+            plannerFamily: PlannerFamily.code.rawValue
+        )
     }
 
-    func testActionContractForIDReturnsNil() {
+    private func makeVerifiedTransition(
+        from: String,
+        to: String,
+        contractID: String,
+        verified: Bool = true,
+        timestamp: TimeInterval = Date().timeIntervalSince1970
+    ) -> VerifiedTransition {
+        VerifiedTransition(
+            fromPlanningStateID: PlanningStateID(rawValue: from),
+            toPlanningStateID: PlanningStateID(rawValue: to),
+            actionContractID: contractID,
+            agentKind: .code,
+            commandCategory: CodeCommandCategory.test.rawValue,
+            plannerFamily: PlannerFamily.code.rawValue,
+            postconditionClass: verified ? .stateAdvanced : .actionFailed,
+            verified: verified,
+            failureClass: verified ? nil : FailureClass.testFailed.rawValue,
+            latencyMs: 120,
+            timestamp: timestamp
+        )
+    }
+
+    func testOutgoingStableEdgesMapsPromotedTransition() {
         let store = GraphStore()
-        let contract = store.actionContract(for: "any-id")
-        XCTAssertNil(contract)
+        let contract = makeActionContract(id: "ac-stable")
+        let fromState = makePlanningState(id: "from-stable")
+        let toState = makePlanningState(id: "to-stable")
+        let now = Date().timeIntervalSince1970
+
+        for index in 0..<5 {
+            store.recordTransition(
+                makeVerifiedTransition(from: "from-stable", to: "to-stable", contractID: contract.id, timestamp: now + Double(index)),
+                actionContract: contract,
+                fromState: fromState,
+                toState: toState
+            )
+        }
+
+        let promoted = store.promoteEligibleEdges(now: Date(timeIntervalSince1970: now + 10))
+        XCTAssertEqual(promoted.count, 1)
+
+        let edges = store.outgoingStableEdges(from: fromState.id)
+        XCTAssertEqual(edges.count, 1)
+        XCTAssertTrue(edges[0].stable)
+        XCTAssertEqual(edges[0].actionContractID, contract.id)
+    }
+
+    func testOutgoingCandidateEdgesMapsRecordedTransition() {
+        let store = GraphStore()
+        let contract = makeActionContract(id: "ac-candidate")
+        let fromState = makePlanningState(id: "from-candidate")
+        let toState = makePlanningState(id: "to-candidate")
+
+        store.recordTransition(
+            makeVerifiedTransition(from: "from-candidate", to: "to-candidate", contractID: contract.id),
+            actionContract: contract,
+            fromState: fromState,
+            toState: toState
+        )
+
+        let edges = store.outgoingCandidateEdges(from: fromState.id)
+        XCTAssertEqual(edges.count, 1)
+        XCTAssertFalse(edges[0].stable)
+        XCTAssertGreaterThan(edges[0].weight, 0)
+    }
+
+    func testActionContractForIDReturnsRecordedContract() {
+        let store = GraphStore()
+        let contract = makeActionContract(id: "contract-id")
+        let state = makePlanningState(id: "state")
+
+        store.recordTransition(
+            makeVerifiedTransition(from: "state", to: "state-2", contractID: contract.id),
+            actionContract: contract,
+            fromState: state,
+            toState: makePlanningState(id: "state-2")
+        )
+
+        let loaded = store.actionContract(for: contract.id)
+        XCTAssertEqual(loaded?.id, contract.id)
     }
 
     func testGraphEdgeInit() {
@@ -6015,6 +6098,62 @@ final class GraphStoreReasoningTests: XCTestCase {
         XCTAssertTrue(edge.stable)
         XCTAssertEqual(edge.weight, 0.8, accuracy: 0.0001)
         XCTAssertEqual(edge.actionContractID, "ac1")
+    }
+
+    func testRecordFailureStoresFailureHistogram() {
+        let store = GraphStore()
+        let state = makePlanningState(id: "failure-state")
+        let contract = makeActionContract(id: "failure-contract")
+
+        store.recordFailure(state: state, actionContract: contract, failure: .testFailed)
+
+        let edge = store.allCandidateEdges().first
+        XCTAssertEqual(edge?.failureHistogram[FailureClass.testFailed.rawValue], 1)
+        XCTAssertEqual(edge?.successes, 0)
+    }
+
+    func testPruneOrDemoteRemovesStableEdgeWhenRollingSuccessCollapses() {
+        let store = GraphStore()
+        let contract = makeActionContract(id: "prune-contract")
+        let fromState = makePlanningState(id: "prune-from")
+        let toState = makePlanningState(id: "prune-to")
+        let now = Date().timeIntervalSince1970
+
+        for index in 0..<5 {
+            store.recordTransition(
+                makeVerifiedTransition(from: "prune-from", to: "prune-to", contractID: contract.id, timestamp: now + Double(index)),
+                actionContract: contract,
+                fromState: fromState,
+                toState: toState
+            )
+        }
+        _ = store.promoteEligibleEdges(now: Date(timeIntervalSince1970: now + 10))
+        XCTAssertEqual(store.allStableEdges().count, 1)
+
+        for index in 0..<10 {
+            store.recordTransition(
+                VerifiedTransition(
+                    fromPlanningStateID: PlanningStateID(rawValue: "prune-from"),
+                    toPlanningStateID: PlanningStateID(rawValue: "prune-from"),
+                    actionContractID: contract.id,
+                    agentKind: .code,
+                    commandCategory: CodeCommandCategory.test.rawValue,
+                    plannerFamily: PlannerFamily.code.rawValue,
+                    postconditionClass: .stateAdvanced,
+                    verified: false,
+                    failureClass: FailureClass.testFailed.rawValue,
+                    latencyMs: 120,
+                    timestamp: now + 20 + Double(index)
+                ),
+                actionContract: contract,
+                fromState: fromState,
+                toState: fromState
+            )
+        }
+
+        let removed = store.pruneOrDemoteEdges(now: Date(timeIntervalSince1970: now + 40))
+        XCTAssertEqual(removed.count, 1)
+        XCTAssertTrue(store.allStableEdges().isEmpty)
     }
 }
 
@@ -6452,5 +6591,30 @@ final class LearningLayerTests: XCTestCase {
         ]
         let patterns = miner.mine(events: events)
         XCTAssertEqual(patterns.first?.reusable, false)
+    }
+}
+
+@MainActor
+final class VisionLayerTests: XCTestCase {
+
+    func testCDPViewportToScreenAddsOffsets() {
+        let point = CDPBridge.viewportToScreen(viewportX: 50, viewportY: 25, windowX: 100, windowY: 200)
+        XCTAssertEqual(point.x, 150)
+        XCTAssertEqual(point.y, 225)
+    }
+
+    func testVisionBridgeStartSidecarReturnsFalseByDefault() {
+        XCTAssertFalse(VisionBridge.startSidecar())
+    }
+
+    func testVisionPerceptionGroundElementFailsWithoutSidecar() {
+        let result = VisionPerception.groundElement(description: "Send button", appName: nil, cropBox: nil)
+        XCTAssertFalse(result.success)
+        XCTAssertNotNil(result.error)
+    }
+
+    func testVisionPerceptionParseScreenFailsWithoutSidecar() {
+        let result = VisionPerception.parseScreen(appName: nil, fullResolution: false)
+        XCTAssertFalse(result.success)
     }
 }

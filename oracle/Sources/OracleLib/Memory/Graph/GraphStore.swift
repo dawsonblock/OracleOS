@@ -17,6 +17,7 @@ public final class GraphStore {
 
     private var db: OpaquePointer?
     private let path: String
+    let compatibilityStorage = GraphCompatibilityStorage()
 
     public init(path: String = "data/graph.db") {
         self.path = path
