@@ -15,7 +15,7 @@ import Foundation
 /// `WorkflowIndex` is the single source of truth for plan lifecycle
 /// within a runtime session. The planner reads from it via `matching(goal:)`
 /// and `promotedPlans(for:)`.
-public final class WorkflowIndex {
+public final class WorkflowIndex: @unchecked Sendable {
 
     // ── Configuration ───────────────────────────────────
 

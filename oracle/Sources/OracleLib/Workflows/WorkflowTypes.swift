@@ -15,7 +15,7 @@ import Foundation
 // MARK: – WorkflowPromotionStatus
 
 /// The lifecycle state of a workflow plan.
-public enum WorkflowPromotionStatus: String, Equatable, CaseIterable {
+public enum WorkflowPromotionStatus: String, Equatable, CaseIterable, Sendable {
     /// Not yet validated — awaiting enough confirmed successes.
     case candidate
     /// Validated and promoted — used by the planner.
@@ -29,7 +29,7 @@ public enum WorkflowPromotionStatus: String, Equatable, CaseIterable {
 // MARK: – WorkflowStep
 
 /// A single action step within a workflow plan.
-public struct WorkflowStep: Equatable {
+public struct WorkflowStep: Equatable, Sendable {
 
     public let id: String
     /// The action type this step executes.
@@ -63,7 +63,7 @@ public struct WorkflowStep: Equatable {
 /// Plans start as `.candidate` and are promoted to `.promoted` once they
 /// accumulate `WorkflowPromoter.promotionThreshold` distinct confirmed
 /// successes (R10 — conservative learning).
-public struct WorkflowPlan: Equatable {
+public struct WorkflowPlan: Equatable, Sendable {
 
     public let id: String
     public let agentKind: AgentKind
