@@ -1,0 +1,26 @@
+{
+  "": {
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/master.swiftdeps"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Sources/OracleControllerShared/ControllerModels.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/ControllerModels.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/ControllerModels.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/ControllerModels~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/ControllerModels.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/ControllerModels.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Sources/OracleControllerShared/HostProtocol.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/HostProtocol.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/HostProtocol.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/HostProtocol~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/HostProtocol.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/HostProtocol.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Sources/OracleControllerShared/RecipeDocument.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/RecipeDocument.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/RecipeDocument.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/RecipeDocument~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/RecipeDocument.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleControllerShared.build/RecipeDocument.dia"
+  }
+}

@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Python
+*.pyc
+__pycache__/
+.venv/
+.pytest_cache/
+
+# RAPTOR outputs
+out/
+.out/
+
+# Local
+.env*
+.claude/*.local.json
+
+# Runtime artifacts
+codeql_dbs/

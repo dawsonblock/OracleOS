@@ -1,0 +1,117 @@
+{
+  "": {
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/master.swiftdeps"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/AmbiguousUITasks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/AmbiguousUITasks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/AmbiguousUITasks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/AmbiguousUITasks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/AmbiguousUITasks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/AmbiguousUITasks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/BenchmarkRunner.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/BenchmarkRunner.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/BenchmarkRunner.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/BenchmarkRunner~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/BenchmarkRunner.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/BenchmarkRunner.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/CodingBenchmarks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/CodingBenchmarks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/CodingBenchmarks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/CodingBenchmarks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/CodingBenchmarks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/CodingBenchmarks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/DialogStormTasks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/DialogStormTasks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/DialogStormTasks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/DialogStormTasks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/DialogStormTasks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/DialogStormTasks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/EvalBaseline.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalBaseline.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalBaseline.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalBaseline~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalBaseline.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalBaseline.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/EvalFixtures.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalFixtures.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalFixtures.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalFixtures~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalFixtures.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalFixtures.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/EvalMetrics.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalMetrics.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalMetrics.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalMetrics~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalMetrics.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalMetrics.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/EvalReport.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalReport.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalReport.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalReport~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalReport.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalReport.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/EvalRunner.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalRunner.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalRunner.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalRunner~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalRunner.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalRunner.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/EvalTask.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalTask.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalTask.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalTask~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalTask.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/EvalTask.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/HybridBenchmarks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/HybridBenchmarks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/HybridBenchmarks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/HybridBenchmarks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/HybridBenchmarks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/HybridBenchmarks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/OperatorBenchmarks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/OperatorBenchmarks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/OperatorBenchmarks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/OperatorBenchmarks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/OperatorBenchmarks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/OperatorBenchmarks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/PatchFailureTasks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/PatchFailureTasks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/PatchFailureTasks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/PatchFailureTasks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/PatchFailureTasks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/PatchFailureTasks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/RecoveryLoopTasks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/RecoveryLoopTasks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/RecoveryLoopTasks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/RecoveryLoopTasks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/RecoveryLoopTasks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/RecoveryLoopTasks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/UpgradeBenchmarks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/UpgradeBenchmarks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/UpgradeBenchmarks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/UpgradeBenchmarks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/UpgradeBenchmarks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/UpgradeBenchmarks.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSEvals/WorkflowDriftTasks.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/WorkflowDriftTasks.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/WorkflowDriftTasks.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/WorkflowDriftTasks~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/WorkflowDriftTasks.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSEvals.build/WorkflowDriftTasks.dia"
+  }
+}

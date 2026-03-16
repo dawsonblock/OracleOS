@@ -1,0 +1,47 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "sourceMap": false, // sourcemaps come from esbuild/vite
+    "rootDir": ".",
+    "outDir": "dist/tsc",
+    "jsx": "react-jsx",
+    "target": "es2022",
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "es2021"],
+    "types": ["@testing-library/jest-dom"],
+    "paths": {
+      "@/*": ["./webviews/*"]
+    }
+  },
+  "include": [
+    "src",
+    "src/commands/execute/cody.json",
+    "test/fixtures",
+    "playwright.config.ts",
+    "playwright.v2.config.ts",
+    "test/e2e",
+    "test/e2e/utils/commands.json",
+    "e2e",
+    "webviews",
+    "webviews/*.d.ts",
+    "package.json",
+    "uninstall"
+  ],
+  "exclude": [
+    "typehacks",
+    "scripts",
+    "dist",
+    "test/integration",
+    "**/test-data",
+    "webviews/vite.config.mts",
+    "**/*.mjs",
+  ],
+  "references": [
+    {
+      "path": "../lib/shared"
+    },
+    {
+      "path": "../lib/prompt-editor"
+    }
+  ]
+}

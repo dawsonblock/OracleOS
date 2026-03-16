@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSPackageTests.build/master.swiftdeps"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSPackageTests.build/runner.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSPackageTests.build/runner.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSPackageTests.build/runner.dia"
+  }
+}

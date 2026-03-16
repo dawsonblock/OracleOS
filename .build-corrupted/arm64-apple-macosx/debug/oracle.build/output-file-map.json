@@ -1,0 +1,26 @@
+{
+  "": {
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/master.swiftdeps"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Sources/oracle/Doctor.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/Doctor.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/Doctor.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/Doctor~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/Doctor.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/Doctor.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Sources/oracle/SetupWizard.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/SetupWizard.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/SetupWizard.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/SetupWizard~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/SetupWizard.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/SetupWizard.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Sources/oracle/main.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/main.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/main.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/main.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/oracle.build/main.dia"
+  }
+}

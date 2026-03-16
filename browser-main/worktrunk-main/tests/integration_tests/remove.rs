@@ -1,0 +1,2357 @@
+use crate::common::{
+    BareRepoTest, TestRepo, TestRepoBase, configure_directive_file, directive_file,
+    make_snapshot_cmd, repo, repo_with_remote, setup_snapshot_settings,
+    setup_temp_snapshot_settings, wt_command,
+};
+use insta_cmd::assert_cmd_snapshot;
+use path_slash::PathExt as _;
+use rstest::rstest;
+use std::time::Duration; // For absence checks (SLEEP_FOR_ABSENCE_CHECK pattern)
+
+#[rstest]
+fn test_remove_already_on_default(repo: TestRepo) {
+    // Already on main branch
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &[], None));
+}
+
+#[rstest]
+fn test_remove_switch_to_default(repo: TestRepo) {
+    // Create and switch to a feature branch in the main repo
+    repo.run_git(&["switch", "-c", "feature"]);
+
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &[], None));
+}
+
+#[rstest]
+fn test_remove_from_worktree(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-wt");
+
+    // Run remove from within the worktree
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &[],
+        Some(&worktree_path)
+    ));
+}
+
+#[rstest]
+fn test_remove_internal_mode(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-internal");
+
+    // Directive file guard must live through command execution
+    let (directive_path, _guard) = directive_file();
+    assert_cmd_snapshot!({
+        let mut cmd = make_snapshot_cmd(&repo, "remove", &[], Some(&worktree_path));
+        configure_directive_file(&mut cmd, &directive_path);
+        cmd
+    });
+}
+
+///
+/// When git runs a subcommand, it sets `GIT_EXEC_PATH` in the environment.
+/// Shell integration cannot work in this case because cd directives cannot
+/// propagate through git's subprocess to the parent shell.
+#[rstest]
+fn test_remove_as_git_subcommand(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-git-subcmd");
+
+    // Remove with GIT_EXEC_PATH set (simulating `git wt remove ...`)
+    let settings = setup_snapshot_settings(&repo);
+    settings.bind(|| {
+        let mut cmd = make_snapshot_cmd(&repo, "remove", &[], Some(&worktree_path));
+        cmd.env("GIT_EXEC_PATH", "/usr/lib/git-core");
+        assert_cmd_snapshot!("remove_as_git_subcommand", cmd);
+    });
+}
+
+#[rstest]
+fn test_remove_dirty_working_tree(repo: TestRepo) {
+    // Create a dirty file
+    std::fs::write(repo.root_path().join("dirty.txt"), "uncommitted changes").unwrap();
+
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &[], None));
+}
+
+#[rstest]
+fn test_remove_locked_worktree(mut repo: TestRepo) {
+    // Create a worktree and lock it
+    let _worktree_path = repo.add_worktree("locked-feature");
+    repo.lock_worktree("locked-feature", Some("Testing lock"));
+
+    // Try to remove the locked worktree - should fail with helpful error
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["locked-feature"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_locked_worktree_no_reason(mut repo: TestRepo) {
+    // Create a worktree and lock it without a reason
+    let _worktree_path = repo.add_worktree("locked-no-reason");
+    repo.lock_worktree("locked-no-reason", None);
+
+    // Try to remove - should show error without parenthesized reason
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["locked-no-reason"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_locked_current_worktree(mut repo: TestRepo) {
+    // Create a worktree, switch to it, and lock it
+    let worktree_path = repo.add_worktree("locked-current");
+    repo.lock_worktree("locked-current", Some("Do not remove"));
+
+    // Try to remove current (locked) worktree - should fail
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &[],
+        Some(&worktree_path)
+    ));
+}
+
+#[rstest]
+fn test_remove_locked_detached_worktree(mut repo: TestRepo) {
+    // Create a worktree, detach HEAD, and lock it
+    let worktree_path = repo.add_worktree("locked-detached");
+    repo.detach_head_in_worktree("locked-detached");
+    repo.lock_worktree("locked-detached", Some("Detached and locked"));
+
+    // Try to remove from within the locked detached worktree - should fail
+    // This exercises the RemoveTarget::Current path for locked worktrees
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &[],
+        Some(&worktree_path)
+    ));
+}
+
+#[rstest]
+fn test_remove_locked_detached_multi(mut repo: TestRepo) {
+    // Test multi-remove where current worktree (@ target) is locked and detached
+    let _other_worktree = repo.add_worktree("other");
+    let _locked_worktree = repo.add_worktree("locked-detached");
+    repo.detach_head_in_worktree("locked-detached");
+    repo.lock_worktree("locked-detached", Some("Locked detached"));
+
+    // From the locked detached worktree, try to remove @ and other
+    // The @ resolves to current (locked-detached) which is locked
+    let locked_path = repo.worktree_path("locked-detached");
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["@", "other"],
+        Some(locked_path)
+    ));
+}
+
+#[rstest]
+fn test_remove_by_name_from_main(mut repo: TestRepo) {
+    // Create a worktree
+    let _worktree_path = repo.add_worktree("feature-a");
+
+    // Remove it by name from main repo
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &["feature-a"], None));
+}
+
+#[rstest]
+fn test_remove_by_name_from_other_worktree(mut repo: TestRepo) {
+    // Create two worktrees
+    let worktree_a = repo.add_worktree("feature-a");
+    let _worktree_b = repo.add_worktree("feature-b");
+
+    // From worktree A, remove worktree B by name
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-b"],
+        Some(&worktree_a)
+    ));
+}
+
+#[rstest]
+fn test_remove_current_by_name(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-current");
+
+    // Remove current worktree by specifying its name
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-current"],
+        Some(&worktree_path)
+    ));
+}
+
+#[rstest]
+fn test_remove_nonexistent_worktree(repo: TestRepo) {
+    // Try to remove a worktree that doesn't exist
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &["nonexistent"], None));
+}
+
+///
+/// Regression test for bug where `wt remove npm` would show "Cannot create worktree for npm"
+/// when the expected path was occupied. The fix uses `OperationMode::Remove` which skips
+/// the path occupation check entirely, correctly treating this as a branch-only removal.
+///
+/// Setup:
+/// - Branch `npm` exists but has no worktree
+/// - The expected path for `npm` (repo.npm) is occupied by a different branch's worktree
+///
+/// Expected behavior:
+/// - Warning: "No worktree found for branch npm"
+/// - Success: Branch deleted (same commit as main)
+#[rstest]
+fn test_remove_branch_no_worktree_path_occupied(mut repo: TestRepo) {
+    // Create branch `npm` without a worktree
+    repo.git_command().args(["branch", "npm"]).output().unwrap();
+
+    // Create a worktree for a different branch at the path where `npm` worktree would be
+    // (the path template puts worktrees at ../repo.branch, so ../repo.npm would be npm's path)
+    let _other_worktree = repo.add_worktree("other");
+
+    // Manually move the worktree to occupy npm's expected path
+    // First, get the expected path for npm
+    let npm_expected_path = repo.root_path().parent().unwrap().join(format!(
+        "{}.npm",
+        repo.root_path().file_name().unwrap().to_str().unwrap()
+    ));
+    let other_path = repo.root_path().parent().unwrap().join(format!(
+        "{}.other",
+        repo.root_path().file_name().unwrap().to_str().unwrap()
+    ));
+
+    // Remove the worktree metadata and move the directory
+    repo.git_command()
+        .args([
+            "worktree",
+            "remove",
+            "--force",
+            other_path.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+
+    // Create worktree at npm's expected path but for the "other" branch
+    repo.git_command()
+        .args([
+            "worktree",
+            "add",
+            npm_expected_path.to_str().unwrap(),
+            "other",
+        ])
+        .output()
+        .unwrap();
+
+    // Now: branch `npm` exists, no worktree for it, but npm's expected path has `other` branch
+    // Running `wt remove npm` should show "No worktree found" NOT "Cannot create worktree"
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &["npm"], None));
+}
+
+#[rstest]
+fn test_remove_multiple_nonexistent_force(repo: TestRepo) {
+    // Try to force-remove multiple branches that don't exist
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["-D", "foo", "bar", "baz"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_remote_only_branch(#[from(repo_with_remote)] repo: TestRepo) {
+    // Create a remote-only branch by pushing a branch then deleting it locally
+    repo.run_git(&["branch", "remote-feature"]);
+    repo.run_git(&["push", "origin", "remote-feature"]);
+    repo.run_git(&["branch", "-D", "remote-feature"]);
+    repo.run_git(&["fetch", "origin"]);
+
+    // Try to remove a branch that only exists on remote - should get helpful error
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["remote-feature"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_nonexistent_branch(repo: TestRepo) {
+    // Try to remove a branch that doesn't exist at all
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &["nonexistent"], None));
+}
+
+#[rstest]
+fn test_remove_partial_success(mut repo: TestRepo) {
+    // Create one valid worktree
+    let _feature_path = repo.add_worktree("feature");
+
+    // Try to remove both the valid worktree and a nonexistent one
+    // The valid one should be removed; error for nonexistent; exit with failure
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature", "nonexistent"],
+        None
+    ));
+
+    // Verify the valid worktree was actually removed
+    let worktrees_dir = repo.root_path().parent().unwrap();
+    assert!(
+        !worktrees_dir.join("feature").exists(),
+        "feature worktree should have been removed despite partial failure"
+    );
+}
+
+#[rstest]
+fn test_remove_by_name_dirty_target(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-dirty");
+
+    // Create a dirty file in the target worktree
+    std::fs::write(worktree_path.join("dirty.txt"), "uncommitted changes").unwrap();
+
+    // Try to remove it by name from main repo
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &["feature-dirty"], None));
+}
+
+/// --force allows removal of dirty worktrees (issue #658)
+/// This test: untracked files, branch at same commit as main
+#[rstest]
+fn test_remove_force_with_untracked_files(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-untracked");
+
+    // Create an untracked file (like devbox.lock, .env, build artifacts)
+    std::fs::write(worktree_path.join("devbox.lock"), "untracked content").unwrap();
+
+    // Verify git sees it as untracked only
+    let status = repo
+        .git_command()
+        .args(["status", "--porcelain"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    let status_output = String::from_utf8_lossy(&status.stdout);
+    assert!(
+        status_output.contains("?? devbox.lock"),
+        "File should be untracked"
+    );
+
+    // Remove with --force should succeed
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--force", "feature-untracked"],
+        None
+    ));
+}
+
+/// --force allows removal of dirty worktrees (issue #658)
+/// This test: modified tracked file, branch ahead of main (unmerged)
+#[rstest]
+fn test_remove_force_with_modified_files(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-modified");
+
+    // Add a file to the worktree and commit it first
+    std::fs::write(worktree_path.join("tracked.txt"), "original content").unwrap();
+    repo.git_command()
+        .args(["add", "tracked.txt"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add tracked file"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Now modify the tracked file
+    std::fs::write(worktree_path.join("tracked.txt"), "modified content").unwrap();
+
+    // --force passes through to git, which allows this
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--force", "feature-modified"],
+        None
+    ));
+}
+
+/// --force allows removal of dirty worktrees (issue #658)
+/// This test: staged (uncommitted) file, branch at same commit as main
+#[rstest]
+fn test_remove_force_with_staged_files(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-staged");
+
+    // Create and stage a new file (but don't commit)
+    std::fs::write(worktree_path.join("staged.txt"), "staged content").unwrap();
+    repo.git_command()
+        .args(["add", "staged.txt"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // --force passes through to git, which allows this
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--force", "feature-staged"],
+        None
+    ));
+}
+
+/// --force + -D: dirty worktree AND unmerged branch
+#[rstest]
+fn test_remove_force_with_force_delete(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-dirty-unmerged");
+
+    // Make a commit so the branch is ahead of main (unmerged)
+    repo.git_command()
+        .args(["commit", "--allow-empty", "-m", "feature commit"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Add untracked file to make the worktree dirty
+    std::fs::write(worktree_path.join("untracked.txt"), "dirty").unwrap();
+
+    // --force (dirty worktree) + -D (force delete unmerged branch)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--force", "-D", "feature-dirty-unmerged"],
+        None
+    ));
+}
+
+/// Regression test for issue #839: untracked files not deleted on Windows.
+/// Verifies the worktree directory is actually removed, not just that the command succeeds.
+#[rstest]
+fn test_remove_force_actually_deletes_directory_with_untracked(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-untracked-delete");
+
+    // Make a commit so the branch is ahead of main (unmerged)
+    repo.git_command()
+        .args(["commit", "--allow-empty", "-m", "feature commit"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Create untracked files (the scenario from issue #839)
+    std::fs::write(worktree_path.join("untracked.txt"), "untracked content").unwrap();
+    std::fs::create_dir_all(worktree_path.join("untracked_dir")).unwrap();
+    std::fs::write(
+        worktree_path.join("untracked_dir/nested.txt"),
+        "nested untracked",
+    )
+    .unwrap();
+
+    // Verify worktree exists before removal
+    assert!(
+        worktree_path.exists(),
+        "Worktree should exist before removal"
+    );
+
+    // Remove with --force -D (the flags from issue #839)
+    let output = repo
+        .wt_command()
+        .args([
+            "remove",
+            "--force",
+            "-D",
+            "--foreground",
+            "feature-untracked-delete",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "wt remove --force -D should succeed, stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // The critical assertion: directory must actually be gone
+    assert!(
+        !worktree_path.exists(),
+        "Worktree directory should be deleted after `wt remove --force -D`, but it still exists"
+    );
+
+    // Verify branch is also deleted
+    let branch_list = repo
+        .git_command()
+        .args(["branch", "--list", "feature-untracked-delete"])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&branch_list.stdout)
+            .trim()
+            .is_empty(),
+        "Branch should be deleted with -D flag"
+    );
+}
+
+#[rstest]
+fn test_remove_multiple_worktrees(mut repo: TestRepo) {
+    // Create three worktrees
+    let _worktree_a = repo.add_worktree("feature-a");
+    let _worktree_b = repo.add_worktree("feature-b");
+    let _worktree_c = repo.add_worktree("feature-c");
+
+    // Remove all three at once from main repo
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-a", "feature-b", "feature-c"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_multiple_including_current(mut repo: TestRepo) {
+    // Create three worktrees
+    let worktree_a = repo.add_worktree("feature-a");
+    let _worktree_b = repo.add_worktree("feature-b");
+    let _worktree_c = repo.add_worktree("feature-c");
+
+    // From worktree A, remove all three (including current)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-a", "feature-b", "feature-c"],
+        Some(&worktree_a)
+    ));
+}
+
+#[rstest]
+fn test_remove_branch_not_fully_merged(mut repo: TestRepo) {
+    // Create a worktree with an unmerged commit
+    let worktree_path = repo.add_worktree("feature-unmerged");
+
+    // Add a commit to the feature branch that's not in main
+    std::fs::write(worktree_path.join("feature.txt"), "new feature").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Try to remove it from the main repo
+    // Branch deletion should fail but worktree removal should succeed
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-unmerged"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_foreground(mut repo: TestRepo) {
+    // Create a worktree
+    let _worktree_path = repo.add_worktree("feature-fg");
+
+    // Remove it with --foreground flag from main repo
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "feature-fg"],
+        None
+    ));
+}
+
+/// Tests deprecated --no-background flag shows warning but still works
+#[rstest]
+fn test_remove_no_background_deprecated(mut repo: TestRepo) {
+    // Create a worktree
+    let _worktree_path = repo.add_worktree("feature-deprecated");
+
+    // Remove it with deprecated --no-background flag from main repo
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--no-background", "feature-deprecated"],
+        None
+    ));
+}
+
+/// Tests that --force-delete and --no-delete-branch are mutually exclusive
+#[rstest]
+fn test_remove_conflicting_branch_flags(repo: TestRepo) {
+    // Try to use both --force-delete (-D) and --no-delete-branch together
+    // This should fail with an error
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["-D", "--no-delete-branch", "nonexistent"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_foreground_unmerged(mut repo: TestRepo) {
+    // Create a worktree with an unmerged commit
+    let worktree_path = repo.add_worktree("feature-unmerged-fg");
+
+    // Add a commit to the feature branch that's not in main
+    std::fs::write(worktree_path.join("feature.txt"), "new feature").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Remove it with --foreground flag from main repo
+    // Branch deletion should fail but worktree removal should succeed
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "feature-unmerged-fg"],
+        None
+    ));
+}
+
+/// Tests foreground removal with --no-delete-branch on an integrated branch.
+/// The hint should show "Branch integrated (reason); retained with --no-delete-branch"
+#[rstest]
+fn test_remove_foreground_no_delete_branch(mut repo: TestRepo) {
+    // Create a worktree (integrated - same commit as main)
+    let _worktree_path = repo.add_worktree("feature-fg-keep");
+
+    // Remove with both --foreground and --no-delete-branch
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "--no-delete-branch", "feature-fg-keep"],
+        None
+    ));
+}
+
+/// Tests foreground removal with --no-delete-branch on an unmerged branch.
+/// No hint needed since the flag had no effect (branch wouldn't be deleted anyway).
+#[rstest]
+fn test_remove_foreground_no_delete_branch_unmerged(mut repo: TestRepo) {
+    // Create a worktree with an unmerged commit
+    let worktree_path = repo.add_worktree("feature-fg-unmerged-keep");
+
+    // Add a commit to the feature branch that's not in main
+    std::fs::write(worktree_path.join("feature.txt"), "new feature").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Go back to main
+    repo.git_command()
+        .args(["checkout", "main"])
+        .output()
+        .unwrap();
+
+    // Remove with both --foreground and --no-delete-branch
+    // No hint because:
+    // - Branch is unmerged (wouldn't be deleted anyway)
+    // - --no-delete-branch had no effect
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &[
+            "--foreground",
+            "--no-delete-branch",
+            "feature-fg-unmerged-keep",
+        ],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_no_delete_branch(mut repo: TestRepo) {
+    // Create a worktree (integrated - same commit as main)
+    let _worktree_path = repo.add_worktree("feature-keep");
+
+    // Remove worktree but keep the branch using --no-delete-branch flag
+    // Since branch is integrated, the flag has an effect - hint explains this
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--no-delete-branch", "feature-keep"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_no_delete_branch_unmerged(mut repo: TestRepo) {
+    // Create a worktree with an unmerged commit
+    let worktree_path = repo.add_worktree("feature-unmerged-keep");
+
+    // Add a commit to the feature branch that's not in main
+    std::fs::write(worktree_path.join("feature.txt"), "new feature").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Go back to main before removing
+    repo.git_command()
+        .args(["checkout", "main"])
+        .output()
+        .unwrap();
+
+    // Remove worktree with --no-delete-branch flag
+    // Since branch is unmerged, the flag has no effect - no hint shown
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--no-delete-branch", "feature-unmerged-keep"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_branch_only_merged(repo: TestRepo) {
+    // Create a branch from main without a worktree (already merged)
+    repo.git_command()
+        .args(["branch", "feature-merged"])
+        .output()
+        .unwrap();
+
+    // Remove the branch (no worktree exists)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-merged"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_branch_only_unmerged(repo: TestRepo) {
+    // Create a branch with a unique commit (not in main)
+    repo.git_command()
+        .args(["branch", "feature-unmerged"])
+        .output()
+        .unwrap();
+
+    // Add a commit to the branch that's not in main
+    repo.git_command()
+        .args(["checkout", "feature-unmerged"])
+        .output()
+        .unwrap();
+    std::fs::write(repo.root_path().join("feature.txt"), "new feature").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["checkout", "main"])
+        .output()
+        .unwrap();
+
+    // Try to remove the branch (no worktree exists, branch not merged)
+    // Branch deletion should fail but not error
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-unmerged"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_branch_only_force_delete(repo: TestRepo) {
+    // Create a branch with a unique commit (not in main)
+    repo.git_command()
+        .args(["branch", "feature-force"])
+        .output()
+        .unwrap();
+
+    // Add a commit to the branch that's not in main
+    repo.git_command()
+        .args(["checkout", "feature-force"])
+        .output()
+        .unwrap();
+    std::fs::write(repo.root_path().join("feature.txt"), "new feature").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["checkout", "main"])
+        .output()
+        .unwrap();
+
+    // Force delete the branch (no worktree exists)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--force-delete", "feature-force"],
+        None
+    ));
+}
+
+///
+/// When in detached HEAD, we should still be able to remove the current worktree
+/// using path-based removal (no branch deletion).
+#[rstest]
+fn test_remove_from_detached_head_in_worktree(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-detached");
+
+    // Detach HEAD in the worktree
+    repo.detach_head_in_worktree("feature-detached");
+
+    // Run remove from within the detached worktree (should still work)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &[],
+        Some(&worktree_path)
+    ));
+}
+
+///
+/// Covers the foreground detached HEAD code path in handlers.rs.
+/// The output should be "✓ Removed worktree (detached HEAD, no branch to delete)".
+///
+/// Ignored on Windows: subprocess tests stay in the worktree, causing file locking errors.
+#[rstest]
+#[cfg_attr(windows, ignore)]
+fn test_remove_foreground_detached_head(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-detached-fg");
+
+    // Detach HEAD in the worktree
+    repo.detach_head_in_worktree("feature-detached-fg");
+
+    // Run foreground remove from within the detached worktree
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground"],
+        Some(&worktree_path)
+    ));
+}
+
+///
+/// This should behave identically to `wt remove` (no args) - path-based removal
+/// without branch deletion. The `@` symbol refers to the current worktree.
+#[rstest]
+fn test_remove_at_from_detached_head_in_worktree(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-detached-at");
+
+    // Detach HEAD in the worktree
+    repo.detach_head_in_worktree("feature-detached-at");
+
+    // Run `wt remove @` from within the detached worktree (should behave same as no args)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["@"],
+        Some(&worktree_path)
+    ));
+}
+
+///
+/// This simulates a squash merge workflow where:
+/// - Feature branch has commits ahead of main
+/// - Main is updated (e.g., via squash merge on GitHub) with the same content
+/// - Branch is NOT an ancestor of main, but tree SHAs match
+/// - Branch should be deleted because content is integrated
+#[rstest]
+fn test_remove_branch_matching_tree_content(repo: TestRepo) {
+    // Create a feature branch from main
+    repo.git_command()
+        .args(["branch", "feature-squashed"])
+        .output()
+        .unwrap();
+
+    // On feature branch: add a file
+    repo.git_command()
+        .args(["checkout", "feature-squashed"])
+        .output()
+        .unwrap();
+    std::fs::write(repo.root_path().join("feature.txt"), "squash content").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature (on feature branch)"])
+        .output()
+        .unwrap();
+
+    // On main: add the same file with same content (simulates squash merge result)
+    repo.git_command()
+        .args(["checkout", "main"])
+        .output()
+        .unwrap();
+    std::fs::write(repo.root_path().join("feature.txt"), "squash content").unwrap();
+    repo.git_command()
+        .args(["add", "feature.txt"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature (squash merged)"])
+        .output()
+        .unwrap();
+
+    // Verify the setup: feature-squashed is NOT an ancestor of main (different commits)
+    let is_ancestor = repo
+        .git_command()
+        .args(["merge-base", "--is-ancestor", "feature-squashed", "main"])
+        .output()
+        .unwrap();
+    assert!(
+        !is_ancestor.status.success(),
+        "feature-squashed should NOT be an ancestor of main"
+    );
+
+    // Verify: tree SHAs should match
+    let feature_tree = String::from_utf8(
+        repo.git_command()
+            .args(["rev-parse", "feature-squashed^{tree}"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let main_tree = String::from_utf8(
+        repo.git_command()
+            .args(["rev-parse", "main^{tree}"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_eq!(
+        feature_tree.trim(),
+        main_tree.trim(),
+        "Tree SHAs should match (same content)"
+    );
+
+    // Remove the branch - should succeed because tree content matches main
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-squashed"],
+        None
+    ));
+}
+///
+/// This test documents the expected behavior:
+/// 1. Linked worktrees can be removed (whether from within them or from elsewhere)
+/// 2. The main worktree cannot be removed under any circumstances
+/// 3. This is true regardless of which branch is checked out in the main worktree
+///
+/// Skipped on Windows: Tests run as subprocesses which can't change directory via shell
+/// integration. Real users are fine - shell integration cds to main before removing.
+/// But subprocess tests stay in the worktree, causing Windows file locking errors.
+#[rstest]
+#[cfg_attr(windows, ignore)]
+fn test_remove_main_worktree_vs_linked_worktree(mut repo: TestRepo) {
+    // Create a linked worktree
+    let linked_wt_path = repo.add_worktree("feature");
+
+    // Part 1: Verify linked worktree CAN be removed (from within it)
+    // Use --foreground to ensure removal completes before creating next worktree
+    assert_cmd_snapshot!(
+        "remove_main_vs_linked__from_linked_succeeds",
+        make_snapshot_cmd(&repo, "remove", &["--foreground"], Some(&linked_wt_path))
+    );
+
+    // Part 2: Recreate the linked worktree for the next test
+    let _linked_wt_path = repo.add_worktree("feature2");
+
+    // Part 3: Verify linked worktree CAN be removed (from main, by name)
+    assert_cmd_snapshot!(
+        "remove_main_vs_linked__from_main_by_name_succeeds",
+        make_snapshot_cmd(&repo, "remove", &["feature2"], None)
+    );
+
+    // Part 4: Verify main worktree CANNOT be removed (from main, on default branch)
+    assert_cmd_snapshot!(
+        "remove_main_vs_linked__main_on_default_fails",
+        make_snapshot_cmd(&repo, "remove", &[], None)
+    );
+
+    // Part 5: Create a feature branch IN the main worktree, verify STILL cannot remove
+    repo.run_git(&["switch", "-c", "feature-in-main"]);
+
+    assert_cmd_snapshot!(
+        "remove_main_vs_linked__main_on_feature_fails",
+        make_snapshot_cmd(&repo, "remove", &[], None)
+    );
+
+    // Part 6: Verify main worktree CANNOT be removed by name from a linked worktree
+    // Switch back to main branch in main worktree, then create a new linked worktree
+    repo.run_git(&["switch", "main"]);
+
+    let linked_for_test = repo.add_worktree("test-from-linked");
+    assert_cmd_snapshot!(
+        "remove_main_vs_linked__main_by_name_from_linked_fails",
+        make_snapshot_cmd(&repo, "remove", &["main"], Some(&linked_for_test))
+    );
+}
+
+///
+/// When removing a worktree for "main" branch, we should NOT show "(ancestor of main)"
+/// because that would be tautological. The message should just be "Removed main worktree & branch".
+///
+/// This requires a bare repo setup since you can't have a linked worktree for the default
+/// branch in a normal repo (the main worktree already has it checked out).
+#[test]
+fn test_remove_default_branch_no_tautology() {
+    let test = BareRepoTest::new();
+
+    // Create worktrees for main and feature branches
+    let main_worktree = test.create_worktree("main", "main");
+    test.commit_in(&main_worktree, "Initial commit on main");
+    let feature_worktree = test.create_worktree("feature", "feature");
+
+    // Remove main worktree by name from feature worktree (foreground for snapshot)
+    // Should NOT show "(ancestor of main)" - that would be tautological
+    let settings = setup_temp_snapshot_settings(test.temp_path());
+    settings.bind(|| {
+        let mut cmd = test.wt_command();
+        cmd.args(["remove", "--foreground", "main"])
+            .current_dir(&feature_worktree);
+
+        assert_cmd_snapshot!("remove_default_branch_no_tautology", cmd);
+    });
+}
+
+///
+/// This tests the scenario:
+/// 1. Create feature branch from main and make changes (file A)
+/// 2. Squash-merge feature into main (main now has A via squash commit)
+/// 3. Main advances with more commits (file B)
+/// 4. Try to remove feature
+///
+/// The branch should be detected as integrated because its content (A) is
+/// already in main, even though main has additional content (B).
+///
+/// This is detected via merge simulation: `git merge-tree --write-tree main feature`
+/// produces the same tree as main, meaning merging feature would add nothing.
+#[rstest]
+fn test_remove_squash_merged_then_main_advanced(repo: TestRepo) {
+    // Create feature branch
+    repo.git_command()
+        .args(["checkout", "-b", "feature-squash"])
+        .output()
+        .unwrap();
+
+    // Make changes on feature branch (file A)
+    std::fs::write(repo.root_path().join("feature-a.txt"), "feature content").unwrap();
+    repo.git_command()
+        .args(["add", "feature-a.txt"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature A"])
+        .output()
+        .unwrap();
+
+    // Go back to main
+    repo.git_command()
+        .args(["checkout", "main"])
+        .output()
+        .unwrap();
+
+    // Squash merge feature into main (simulating GitHub squash merge)
+    // This creates a NEW commit on main with the same content changes
+    std::fs::write(repo.root_path().join("feature-a.txt"), "feature content").unwrap();
+    repo.git_command()
+        .args(["add", "feature-a.txt"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Add feature A (squash merged)"])
+        .output()
+        .unwrap();
+
+    // Main advances with another commit (file B)
+    std::fs::write(repo.root_path().join("main-b.txt"), "main content").unwrap();
+    repo.git_command()
+        .args(["add", "main-b.txt"])
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "Main advances with B"])
+        .output()
+        .unwrap();
+
+    // Verify setup: feature-squash is NOT an ancestor of main (squash creates different SHAs)
+    let is_ancestor = repo
+        .git_command()
+        .args(["merge-base", "--is-ancestor", "feature-squash", "main"])
+        .output()
+        .unwrap();
+    assert!(
+        !is_ancestor.status.success(),
+        "feature-squash should NOT be an ancestor of main (squash merge)"
+    );
+
+    // Verify setup: trees don't match (main has file B that feature doesn't)
+    let feature_tree = String::from_utf8(
+        repo.git_command()
+            .args(["rev-parse", "feature-squash^{tree}"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    let main_tree = String::from_utf8(
+        repo.git_command()
+            .args(["rev-parse", "main^{tree}"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert_ne!(
+        feature_tree.trim(),
+        main_tree.trim(),
+        "Tree SHAs should differ (main has file B that feature doesn't)"
+    );
+
+    // Remove the feature branch - should succeed because content is integrated
+    // (detected via merge simulation using git merge-tree)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-squash"],
+        None
+    ));
+}
+
+// ============================================================================
+// Pre-Remove Hook Tests
+// ============================================================================
+
+#[rstest]
+fn test_pre_remove_hook_executes(mut repo: TestRepo) {
+    // Create project config with pre-remove hook
+    repo.write_project_config(r#"pre-remove = "echo 'About to remove worktree'""#);
+    repo.commit("Add config");
+
+    // Pre-approve the command
+    repo.write_test_approvals(
+        r#"[projects."../origin"]
+approved-commands = ["echo 'About to remove worktree'"]
+"#,
+    );
+
+    // Create a worktree to remove
+    let _worktree_path = repo.add_worktree("feature-hook");
+
+    // Remove with --foreground to ensure synchronous execution
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "feature-hook"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_pre_remove_hook_template_variables(mut repo: TestRepo) {
+    // Create project config with template variables
+    repo.write_project_config(
+        r#"[pre-remove]
+branch = "echo 'Branch: {{ branch }}'"
+worktree = "echo 'Worktree: {{ worktree_path }}'"
+worktree_name = "echo 'Name: {{ worktree_name }}'"
+"#,
+    );
+    repo.commit("Add config with templates");
+
+    // Pre-approve the commands (templates match what's shown in prompts)
+    repo.write_test_approvals(
+        r#"[projects."../origin"]
+approved-commands = [
+    "echo 'Branch: {{ branch }}'",
+    "echo 'Worktree: {{ worktree_path }}'",
+    "echo 'Name: {{ worktree_name }}'",
+]
+"#,
+    );
+
+    // Create a worktree to remove
+    let _worktree_path = repo.add_worktree("feature-templates");
+
+    // Remove with --foreground
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "feature-templates"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_pre_remove_hook_runs_in_background_mode(mut repo: TestRepo) {
+    use crate::common::wait_for_file;
+
+    // Create a marker file that the hook will create
+    let marker_file = repo.root_path().join("hook-ran.txt");
+
+    // Create project config with hook that creates a file
+    repo.write_project_config(&format!(
+        r#"pre-remove = "echo 'hook ran' > {}""#,
+        marker_file.to_slash_lossy()
+    ));
+    repo.commit("Add config");
+
+    // Pre-approve the command
+    repo.write_test_config(r#"worktree-path = "../{{ repo }}.{{ branch }}""#);
+    repo.write_test_approvals(&format!(
+        r#"[projects."../origin"]
+approved-commands = ["echo 'hook ran' > {}"]
+"#,
+        marker_file.to_slash_lossy()
+    ));
+
+    // Create a worktree to remove
+    let _worktree_path = repo.add_worktree("feature-bg");
+
+    // Remove in background mode (default)
+    let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_wt"));
+    repo.configure_wt_cmd(&mut cmd);
+    cmd.current_dir(repo.root_path())
+        .args(["remove", "feature-bg"])
+        .output()
+        .unwrap();
+
+    // Wait for the hook to create the marker file
+    wait_for_file(&marker_file);
+
+    // Marker file SHOULD exist - pre-remove hooks run before background removal starts
+    assert!(
+        marker_file.exists(),
+        "Pre-remove hook should run even in background mode"
+    );
+}
+
+#[rstest]
+fn test_pre_remove_hook_failure_aborts(mut repo: TestRepo) {
+    // Create project config with failing hook
+    repo.write_project_config(r#"pre-remove = "exit 1""#);
+    repo.commit("Add config");
+
+    // Pre-approve the command
+    repo.write_test_approvals(
+        r#"[projects."../origin"]
+approved-commands = ["exit 1"]
+"#,
+    );
+
+    // Create a worktree to remove
+    let worktree_path = repo.add_worktree("feature-fail");
+
+    // Remove - should FAIL due to hook failure
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "feature-fail"],
+        None
+    ));
+
+    // Verify worktree was NOT removed (hook failure aborted removal)
+    assert!(
+        worktree_path.exists(),
+        "Worktree should NOT be removed when hook fails"
+    );
+}
+
+/// Pre-remove hook failure should NOT write cd directive.
+/// Bug: cd directive was written before pre-remove hooks ran, so if hooks failed,
+/// the shell would still cd to main_path even though the worktree wasn't removed.
+#[rstest]
+fn test_pre_remove_hook_failure_no_cd_directive(mut repo: TestRepo) {
+    // Create project config with failing hook
+    repo.write_project_config(r#"pre-remove = "exit 1""#);
+    repo.commit("Add config");
+
+    // Pre-approve the command
+    repo.write_test_approvals(
+        r#"[projects."../origin"]
+approved-commands = ["exit 1"]
+"#,
+    );
+
+    // Create a worktree to remove
+    let worktree_path = repo.add_worktree("feature-cd-test");
+
+    // Set up directive file
+    let (directive_path, _guard) = directive_file();
+
+    // Run remove from within the worktree (which would trigger cd to main if it worked)
+    let mut cmd = repo.wt_command();
+    cmd.args(["remove", "--foreground"]);
+    cmd.current_dir(&worktree_path);
+    configure_directive_file(&mut cmd, &directive_path);
+    let output = cmd.output().unwrap();
+
+    // Command should have failed (hook failure)
+    assert!(
+        !output.status.success(),
+        "Remove should fail when pre-remove hook fails"
+    );
+
+    // Directive file should be empty (no cd written)
+    let directives = std::fs::read_to_string(&directive_path).unwrap_or_default();
+    assert!(
+        !directives.contains("cd "),
+        "Directive file should NOT contain cd when hook fails, got: {}",
+        directives
+    );
+
+    // Worktree should still exist
+    assert!(
+        worktree_path.exists(),
+        "Worktree should NOT be removed when hook fails"
+    );
+}
+
+#[rstest]
+fn test_pre_remove_hook_not_for_branch_only(repo: TestRepo) {
+    // Create a marker file that the hook would create
+    let marker_file = repo.root_path().join("branch-only-hook.txt");
+
+    // Create project config with hook
+    repo.write_project_config(&format!(
+        r#"pre-remove = "echo 'hook ran' > {}""#,
+        marker_file.to_slash_lossy()
+    ));
+    repo.commit("Add config");
+
+    // Pre-approve the command
+    repo.write_test_config(r#"worktree-path = "../{{ repo }}.{{ branch }}""#);
+    repo.write_test_approvals(&format!(
+        r#"[projects."../origin"]
+approved-commands = ["echo 'hook ran' > {}"]
+"#,
+        marker_file.to_slash_lossy()
+    ));
+
+    // Create a branch without a worktree
+    repo.git_command()
+        .args(["branch", "branch-only"])
+        .output()
+        .unwrap();
+
+    // Remove the branch (no worktree)
+    let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_wt"));
+    repo.configure_wt_cmd(&mut cmd);
+    cmd.current_dir(repo.root_path())
+        .args(["remove", "branch-only"])
+        .output()
+        .unwrap();
+
+    // Marker file should NOT exist - pre-remove hooks only run for worktree removal
+    assert!(
+        !marker_file.exists(),
+        "Pre-remove hook should NOT run for branch-only removal"
+    );
+}
+
+#[rstest]
+fn test_pre_remove_hook_skipped_with_no_verify(mut repo: TestRepo) {
+    use std::thread;
+
+    // Create a marker file that the hook would create
+    let marker_file = repo.root_path().join("should-not-exist.txt");
+
+    // Create project config with hook that creates a file
+    repo.write_project_config(&format!(
+        r#"pre-remove = "echo 'hook ran' > {}""#,
+        marker_file.to_slash_lossy()
+    ));
+    repo.commit("Add config");
+
+    // Pre-approve the command (even though it shouldn't run)
+    repo.write_test_config(r#"worktree-path = "../{{ repo }}.{{ branch }}""#);
+    repo.write_test_approvals(&format!(
+        r#"[projects."../origin"]
+approved-commands = ["echo 'hook ran' > {}"]
+"#,
+        marker_file.to_slash_lossy()
+    ));
+
+    // Create a worktree to remove
+    let worktree_path = repo.add_worktree("feature-skip");
+
+    // Remove with --no-verify to skip hooks
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "--no-verify", "feature-skip"],
+        None
+    ));
+
+    // Wait for any potential hook execution (absence check - can't poll, use 500ms per guidelines)
+    thread::sleep(Duration::from_millis(500));
+
+    // Marker file should NOT exist - --no-verify skips the hook
+    assert!(
+        !marker_file.exists(),
+        "Pre-remove hook should NOT run with --no-verify"
+    );
+
+    // Worktree should be removed (removal itself succeeds)
+    assert!(
+        !worktree_path.exists(),
+        "Worktree should be removed even with --no-verify"
+    );
+}
+
+///
+/// Even when a worktree is in detached HEAD state (no branch), the pre-remove
+/// hook should still execute.
+///
+/// Skipped on Windows: Tests run as subprocesses which can't change directory via shell
+/// integration. Real users are fine - shell integration cds to main before removing.
+/// But subprocess tests stay in the worktree, causing Windows file locking errors.
+#[rstest]
+#[cfg_attr(windows, ignore)]
+fn test_pre_remove_hook_runs_for_detached_head(mut repo: TestRepo) {
+    // Create marker file path in the repo root
+    // Use short filename to avoid terminal line-wrapping differences between platforms
+    // (macOS temp paths are ~60 chars vs Linux ~20 chars, affecting wrap points)
+    let marker_file = repo.root_path().join("m.txt");
+    let marker_path = marker_file.to_slash_lossy();
+
+    // Create project config with pre-remove hook that creates a marker file
+    repo.write_project_config(&format!(r#"pre-remove = "touch {marker_path}""#,));
+    repo.commit("Add config");
+
+    // Pre-approve the command
+    repo.write_test_config(r#"worktree-path = "../{{ repo }}.{{ branch }}""#);
+    repo.write_test_approvals(&format!(
+        r#"[projects."../origin"]
+approved-commands = ["touch {marker_path}"]
+"#,
+    ));
+
+    // Create a worktree and detach HEAD
+    let worktree_path = repo.add_worktree("feature-detached-hook");
+    repo.detach_head_in_worktree("feature-detached-hook");
+
+    // Remove with --foreground to ensure synchronous execution
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground"],
+        Some(&worktree_path)
+    ));
+
+    // Marker file should exist - hook ran
+    assert!(
+        marker_file.exists(),
+        "Pre-remove hook should run for detached HEAD worktrees"
+    );
+}
+
+///
+/// This complements `test_pre_remove_hook_runs_for_detached_head` by verifying
+/// the hook also runs when removal happens in background (the default).
+#[rstest]
+fn test_pre_remove_hook_runs_for_detached_head_background(mut repo: TestRepo) {
+    // Create marker file path in the repo root
+    let marker_file = repo.root_path().join("detached-bg-hook-marker.txt");
+
+    // Create project config with pre-remove hook that creates a marker file
+    let marker_path = marker_file.to_slash_lossy();
+    repo.write_project_config(&format!(r#"pre-remove = "touch {marker_path}""#,));
+    repo.commit("Add config");
+
+    // Pre-approve the commands
+    repo.write_test_config(r#"worktree-path = "../{{ repo }}.{{ branch }}""#);
+    repo.write_test_approvals(&format!(
+        r#"[projects."../origin"]
+approved-commands = ["touch {marker_path}"]
+"#,
+    ));
+
+    // Create a worktree and detach HEAD
+    let worktree_path = repo.add_worktree("feature-detached-bg");
+    repo.detach_head_in_worktree("feature-detached-bg");
+
+    // Remove in background mode (default)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &[],
+        Some(&worktree_path)
+    ));
+
+    // Marker file should exist - hook ran before background spawn
+    assert!(
+        marker_file.exists(),
+        "Pre-remove hook should run for detached HEAD worktrees in background mode"
+    );
+}
+
+///
+/// This is a non-snapshot test to avoid cross-platform line-wrapping differences
+/// (macOS temp paths are ~60 chars vs Linux ~20 chars). The snapshot version
+/// of this test (`test_pre_remove_hook_runs_for_detached_head`) verifies the hook runs;
+/// this test verifies the specific template expansion behavior.
+///
+/// Skipped on Windows: Tests run as subprocesses which can't change directory via shell
+/// integration. Real users are fine - shell integration cds to main before removing.
+/// But subprocess tests stay in the worktree, causing Windows file locking errors.
+#[rstest]
+#[cfg_attr(windows, ignore)]
+fn test_pre_remove_hook_branch_expansion_detached_head(mut repo: TestRepo) {
+    // Create a file where the hook will write the branch template expansion
+    let branch_file = repo.root_path().join("branch-expansion.txt");
+    let branch_path = branch_file.to_slash_lossy();
+
+    // Create project config with hook that writes {{ branch }} to file
+    repo.write_project_config(&format!(
+        r#"pre-remove = "echo 'branch={{{{ branch }}}}' > {branch_path}""#,
+    ));
+    repo.commit("Add config");
+
+    // Pre-approve the command
+    repo.write_test_config(r#"worktree-path = "../{{ repo }}.{{ branch }}""#);
+    repo.write_test_approvals(&format!(
+        r#"[projects."../origin"]
+approved-commands = ["echo 'branch={{{{ branch }}}}' > {branch_path}"]
+"#,
+    ));
+
+    // Create a worktree and detach HEAD
+    let worktree_path = repo.add_worktree("feature-branch-test");
+    repo.detach_head_in_worktree("feature-branch-test");
+
+    // Run wt remove (not a snapshot test - just verify behavior)
+    let output = wt_command()
+        .args(["remove", "--foreground"])
+        .current_dir(&worktree_path)
+        .env("WORKTRUNK_CONFIG_PATH", repo.test_config_path())
+        .env("WORKTRUNK_APPROVALS_PATH", repo.test_approvals_path())
+        .output()
+        .expect("Failed to execute wt remove");
+
+    assert!(
+        output.status.success(),
+        "wt remove should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify {{ branch }} expanded to "HEAD" (fallback for detached HEAD state)
+    let content =
+        std::fs::read_to_string(&branch_file).expect("Hook should have created the branch file");
+    assert_eq!(
+        content.trim(),
+        "branch=HEAD",
+        "{{ branch }} should expand to 'HEAD' for detached HEAD worktrees"
+    );
+}
+
+///
+/// When a worktree is created at a path that doesn't match the config template,
+/// `wt remove` should show a warning about the path mismatch.
+#[rstest]
+fn test_remove_path_mismatch_warning(repo: TestRepo) {
+    // Create a worktree at a non-standard path using raw git
+    // (wt switch --create would put it at the expected path)
+    let unexpected_path = repo
+        .root_path()
+        .parent()
+        .unwrap()
+        .join("weird-path-for-feature");
+
+    repo.git_command()
+        .args([
+            "worktree",
+            "add",
+            unexpected_path.to_str().unwrap(),
+            "-b",
+            "feature",
+        ])
+        .output()
+        .unwrap();
+
+    // Remove the worktree - should show path mismatch warning
+    assert_cmd_snapshot!(make_snapshot_cmd(&repo, "remove", &["feature"], None));
+}
+
+#[rstest]
+fn test_remove_path_mismatch_warning_foreground(repo: TestRepo) {
+    // Create a worktree at a non-standard path using raw git
+    let unexpected_path = repo
+        .root_path()
+        .parent()
+        .unwrap()
+        .join("another-weird-path");
+
+    repo.git_command()
+        .args([
+            "worktree",
+            "add",
+            unexpected_path.to_str().unwrap(),
+            "-b",
+            "feature-fg",
+        ])
+        .output()
+        .unwrap();
+
+    // Remove in foreground mode - should show path mismatch warning
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--foreground", "feature-fg"],
+        None
+    ));
+}
+
+#[rstest]
+fn test_remove_detached_worktree_in_multi(mut repo: TestRepo) {
+    // Create two worktrees
+    let _feature_a = repo.add_worktree("feature-a");
+    let _feature_b = repo.add_worktree("feature-b");
+
+    // Detach HEAD in feature-b
+    repo.detach_head_in_worktree("feature-b");
+
+    // From main, try to multi-remove both
+    // feature-a should succeed, feature-b should fail (detached HEAD)
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-a", "feature-b"],
+        None
+    ));
+}
+
+/// Test that resolve_worktree("@") works when the worktree is accessed via a symlink.
+///
+/// This tests the path normalization fix where:
+/// - `root()` returns a canonicalized path (symlinks resolved)
+/// - `wt.path` from git is the raw path (symlinks not resolved)
+///
+/// Without proper canonicalization, comparison fails on systems with symlinks
+/// (e.g., macOS /var -> /private/var).
+#[cfg(unix)]
+#[rstest]
+fn test_remove_at_symbol_via_symlink(mut repo: TestRepo) {
+    use std::os::unix::fs::symlink;
+
+    let worktree_path = repo.add_worktree("feature-symlink");
+
+    // Create a symlink pointing to the worktree
+    let symlink_path = repo
+        .root_path()
+        .parent()
+        .unwrap()
+        .join("symlink-to-feature");
+    symlink(&worktree_path, &symlink_path).expect("Failed to create symlink");
+
+    // Verify symlink was created
+    assert!(
+        symlink_path.is_symlink(),
+        "Symlink should exist at {:?}",
+        symlink_path
+    );
+
+    // Run `wt remove @` from the symlinked path
+    // This tests that resolve_worktree("@") properly handles symlinked paths
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["@"],
+        Some(&symlink_path)
+    ));
+}
+
+// ============================================================================
+// Pruned Worktree Tests
+// ============================================================================
+
+/// When a worktree's directory is deleted externally (e.g., `rm -rf`), the git
+/// metadata becomes stale. `wt remove` should prune this stale metadata and
+/// proceed with branch deletion, rather than erroring.
+///
+/// This makes `wt remove` more idempotent - it puts the repository into the
+/// correct end state regardless of whether the directory exists.
+#[rstest]
+fn test_remove_pruned_worktree_directory_missing(mut repo: TestRepo) {
+    // Create a worktree
+    let worktree_path = repo.add_worktree("feature-pruned");
+
+    // Verify the worktree exists
+    assert!(worktree_path.exists(), "Worktree should exist initially");
+
+    // Externally delete the worktree directory (simulating user running `rm -rf`)
+    std::fs::remove_dir_all(&worktree_path).expect("Failed to remove worktree directory");
+    assert!(
+        !worktree_path.exists(),
+        "Worktree directory should be deleted"
+    );
+
+    // Verify git still thinks the worktree exists (stale metadata)
+    let list_output = repo
+        .git_command()
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .unwrap();
+    let list_str = String::from_utf8_lossy(&list_output.stdout);
+    assert!(
+        list_str.contains("feature-pruned"),
+        "Git should still list the stale worktree"
+    );
+
+    // `wt remove feature-pruned` should prune the stale metadata and delete the branch
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-pruned"],
+        None
+    ));
+
+    // Verify the stale worktree metadata is cleaned up
+    let list_after = repo
+        .git_command()
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .unwrap();
+    let list_after_str = String::from_utf8_lossy(&list_after.stdout);
+    assert!(
+        !list_after_str.contains("feature-pruned"),
+        "Stale worktree should be pruned"
+    );
+
+    // Verify the branch is deleted
+    let branch_exists = repo
+        .git_command()
+        .args(["branch", "--list", "feature-pruned"])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&branch_exists.stdout)
+            .trim()
+            .is_empty(),
+        "Branch should be deleted"
+    );
+}
+
+/// Test pruning with --no-delete-branch: should prune metadata but keep the branch
+#[rstest]
+fn test_remove_pruned_worktree_keep_branch(mut repo: TestRepo) {
+    // Create a worktree
+    let worktree_path = repo.add_worktree("feature-pruned-keep");
+
+    // Delete the worktree directory externally
+    std::fs::remove_dir_all(&worktree_path).expect("Failed to remove worktree directory");
+
+    // Remove with --no-delete-branch
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["--no-delete-branch", "feature-pruned-keep"],
+        None
+    ));
+
+    // Verify the branch still exists
+    let branch_exists = repo
+        .git_command()
+        .args(["branch", "--list", "feature-pruned-keep"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&branch_exists.stdout)
+            .trim()
+            .is_empty(),
+        "Branch should still exist"
+    );
+}
+
+/// Test pruning a stale worktree with an unmerged branch: should prune metadata,
+/// retain branch, and show hint to force-delete
+#[rstest]
+fn test_remove_pruned_worktree_unmerged_branch(mut repo: TestRepo) {
+    // Create a worktree with a real change (unmerged with main)
+    let worktree_path = repo.add_worktree("feature-pruned-unmerged");
+    std::fs::write(worktree_path.join("unmerged.txt"), "unmerged work\n").unwrap();
+    repo.git_command()
+        .args(["add", "unmerged.txt"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+    repo.git_command()
+        .args(["commit", "-m", "unmerged work"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    // Delete the worktree directory externally (simulating user running `rm -rf`)
+    std::fs::remove_dir_all(&worktree_path).expect("Failed to remove worktree directory");
+
+    // Remove: should prune stale metadata but retain the unmerged branch
+    assert_cmd_snapshot!(make_snapshot_cmd(
+        &repo,
+        "remove",
+        &["feature-pruned-unmerged"],
+        None
+    ));
+
+    // Verify the branch still exists (retained because unmerged)
+    let branch_exists = repo
+        .git_command()
+        .args(["branch", "--list", "feature-pruned-unmerged"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&branch_exists.stdout)
+            .trim()
+            .is_empty(),
+        "Unmerged branch should be retained"
+    );
+}
+
+// ============================================================================
+// Instant Removal Tests (move-then-delete optimization)
+// ============================================================================
+
+/// Background removal should make the original worktree path unavailable immediately.
+///
+/// This tests the move-then-delete optimization: the worktree directory is renamed
+/// to a staging path synchronously, so the original path is gone before wt returns.
+/// The actual deletion (rm -rf) happens in the background.
+#[rstest]
+fn test_remove_background_path_gone_immediately(mut repo: TestRepo) {
+    // Create a worktree
+    let worktree_path = repo.add_worktree("feature-instant");
+
+    // Verify the worktree exists
+    assert!(worktree_path.exists(), "Worktree should exist initially");
+
+    // Remove in background mode (default) - NOT using snapshot since we need to check state after
+    let output = repo
+        .wt_command()
+        .args(["remove", "feature-instant"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "wt remove should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // The original worktree path should be gone IMMEDIATELY (before background rm completes)
+    // This is the key behavior of the move-then-delete optimization
+    assert!(
+        !worktree_path.exists(),
+        "Worktree path should be gone immediately after wt remove returns"
+    );
+
+    // Note: The staging directory (.wt-removing-*) might already be deleted by the
+    // background process, or it might still exist. Both are valid outcomes.
+    // The key assertion above is that the original path is gone immediately.
+}
+
+/// Background removal should prune git worktree metadata synchronously.
+///
+/// After removal, `git worktree list` should NOT show the removed worktree,
+/// even before the background rm -rf completes.
+#[rstest]
+fn test_remove_background_git_metadata_pruned(mut repo: TestRepo) {
+    // Create a worktree
+    let _worktree_path = repo.add_worktree("feature-prune-test");
+
+    // Verify git knows about the worktree
+    let list_before = repo
+        .git_command()
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&list_before.stdout).contains("feature-prune-test"),
+        "Git should list the worktree before removal"
+    );
+
+    // Remove in background mode
+    let output = repo
+        .wt_command()
+        .args(["remove", "feature-prune-test"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "wt remove should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Git worktree metadata should be pruned IMMEDIATELY
+    let list_after = repo
+        .git_command()
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&list_after.stdout).contains("feature-prune-test"),
+        "Git should NOT list the worktree after removal (metadata should be pruned)"
+    );
+}
+
+/// Background removal should delete the branch synchronously when it's merged.
+///
+/// On the fast path (rename-then-prune), the branch is deleted synchronously
+/// after pruning git metadata, before the background `rm -rf` runs.
+/// This prevents races where the user creates a new worktree with the same
+/// branch name before the background process completes.
+#[rstest]
+fn test_remove_background_deletes_merged_branch(mut repo: TestRepo) {
+    // Create a worktree with the branch already merged to main (same commit)
+    let _worktree_path = repo.add_worktree("feature-merged");
+
+    // Verify branch exists before removal
+    let branches_before = repo
+        .git_command()
+        .args(["branch", "--list", "feature-merged"])
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&branches_before.stdout)
+            .trim()
+            .is_empty(),
+        "Branch should exist before removal"
+    );
+
+    // Remove in background mode (default)
+    let output = repo
+        .wt_command()
+        .args(["remove", "feature-merged"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "wt remove should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Branch should be deleted IMMEDIATELY (synchronously, not in background)
+    let branches_after = repo
+        .git_command()
+        .args(["branch", "--list", "feature-merged"])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&branches_after.stdout)
+            .trim()
+            .is_empty(),
+        "Branch should be deleted synchronously after wt remove returns"
+    );
+}
+
+/// Test that worktree paths containing special characters are handled correctly.
+///
+/// This tests that the `rm -rf -- <path>` command correctly handles paths
+/// that might be misinterpreted as options.
+#[rstest]
+fn test_remove_worktree_with_special_path_chars(mut repo: TestRepo) {
+    // Create a worktree with special characters in the branch name
+    // (which becomes part of the path)
+    let _worktree_path = repo.add_worktree("feature--double-dash");
+
+    // Verify worktree exists
+    let list_before = repo
+        .git_command()
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&list_before.stdout).contains("feature--double-dash"),
+        "Worktree should exist before removal"
+    );
+
+    // Remove the worktree
+    let output = repo
+        .wt_command()
+        .args(["remove", "feature--double-dash"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "wt remove should succeed for path with special chars: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Poll for background worktree removal
+    crate::common::wait_for("worktree with special chars removed", || {
+        let list = repo
+            .git_command()
+            .args(["worktree", "list", "--porcelain"])
+            .output()
+            .unwrap();
+        !String::from_utf8_lossy(&list.stdout).contains("feature--double-dash")
+    });
+}
+
+/// Test that background removal falls back to legacy git worktree remove
+/// when the instant rename fails.
+///
+/// This tests the fallback path: when std::fs::rename() fails (e.g., cross-filesystem,
+/// permissions, or in this case a blocking file), we fall back to the legacy
+/// `git worktree remove` command which handles cleanup properly.
+#[rstest]
+fn test_remove_background_fallback_on_rename_failure(mut repo: TestRepo) {
+    // Create a worktree
+    let worktree_path = repo.add_worktree("feature-fallback");
+
+    // Calculate the expected staged path that the rename would use.
+    // The path is: <worktree>.wt-removing-<TEST_EPOCH>
+    // Since WT_TEST_EPOCH is set by the test harness, the timestamp is deterministic.
+    let staged_path = worktree_path.with_file_name(format!(
+        "{}.wt-removing-{}",
+        worktree_path.file_name().unwrap().to_string_lossy(),
+        crate::common::TEST_EPOCH
+    ));
+
+    // Create a regular file at the staged path to block the rename.
+    // On POSIX systems, you cannot rename a directory to an existing file.
+    std::fs::write(&staged_path, "blocking file").unwrap();
+
+    // Verify worktree exists before removal
+    assert!(
+        worktree_path.exists(),
+        "Worktree should exist before removal"
+    );
+
+    // Remove in background mode - should fall back to legacy removal
+    let output = repo
+        .wt_command()
+        .args(["remove", "feature-fallback"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "wt remove should succeed even when instant rename fails: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Poll for legacy background removal (includes 1-second sleep before git worktree remove)
+    crate::common::wait_for("worktree removed by legacy fallback", || {
+        !worktree_path.exists()
+    });
+
+    // Poll for branch deletion (happens after worktree removal in background command)
+    crate::common::wait_for("branch deleted by legacy fallback", || {
+        let branches = repo
+            .git_command()
+            .args(["branch", "--list", "feature-fallback"])
+            .output()
+            .unwrap();
+        String::from_utf8_lossy(&branches.stdout).trim().is_empty()
+    });
+
+    // Clean up the blocking file
+    let _ = std::fs::remove_file(&staged_path);
+}
+
+/// Stale `.wt-removing-*` directories from crashed removals accumulate on disk.
+///
+/// If `wt remove` is killed after `fs::rename()` succeeds but before the background
+/// `rm -rf` spawns, the staging directory is left behind. When the same worktree is
+/// re-created and removed again, the staging path collides (non-empty directory),
+/// forcing a fallback to legacy removal. The stale directory is never cleaned up.
+#[rstest]
+fn test_remove_stale_staging_dir_from_crashed_removal(mut repo: TestRepo) {
+    let worktree_path = repo.add_worktree("feature-crash");
+
+    // Calculate the deterministic staging path (TEST_EPOCH is fixed in tests)
+    let staged_path = worktree_path.with_file_name(format!(
+        "{}.wt-removing-{}",
+        worktree_path.file_name().unwrap().to_string_lossy(),
+        crate::common::TEST_EPOCH
+    ));
+
+    // Simulate a crashed removal: rename the worktree to the staging path manually,
+    // then prune git metadata — but never run the background rm -rf.
+    std::fs::rename(&worktree_path, &staged_path).unwrap();
+    repo.run_git(&["worktree", "prune"]);
+
+    // Verify the crash state: original path gone, stale staging dir remains
+    assert!(!worktree_path.exists());
+    assert!(staged_path.exists());
+
+    // Re-create the same worktree (branch was deleted by prune, so create fresh)
+    let _ = repo.add_worktree("feature-crash");
+
+    // Remove it again — staging path collides with stale dir, falls back to legacy
+    let output = repo
+        .wt_command()
+        .args(["remove", "feature-crash"])
+        .output()
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "wt remove should succeed despite stale staging dir: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Poll for legacy background removal (includes 1-second sleep before git worktree remove)
+    crate::common::wait_for("re-created worktree removed by fallback", || {
+        !worktree_path.exists()
+    });
+
+    // But the stale staging directory from the first crash is STILL there —
+    // nothing cleans it up. This is the accumulation risk.
+    assert!(
+        staged_path.exists(),
+        "Stale staging directory from crashed removal is never cleaned up"
+    );
+}
+
+/// Tests that foreground removal shows remaining directory entries when
+/// `git worktree remove` fails because a directory can't be deleted.
+///
+/// Uses Unix permissions (non-writable directory) to prevent deletion of
+/// a gitignored directory, triggering the `WorktreeRemovalFailed` error path
+/// that lists remaining entries.
+#[rstest]
+#[cfg(unix)]
+fn test_remove_foreground_failure_shows_remaining_entries(mut repo: TestRepo) {
+    use std::fs::{self, Permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let worktree_path = repo.add_worktree("feature-stuck");
+
+    // Add .gitignore so the stuck directory passes the clean check
+    fs::write(worktree_path.join(".gitignore"), "stuck/\n").unwrap();
+    repo.run_git_in(&worktree_path, &["add", ".gitignore"]);
+    repo.run_git_in(&worktree_path, &["commit", "-m", "Add gitignore"]);
+
+    // Create gitignored directory with a file inside
+    let stuck_dir = worktree_path.join("stuck");
+    fs::create_dir_all(&stuck_dir).unwrap();
+    fs::write(stuck_dir.join("file.txt"), "content").unwrap();
+
+    // Make directory non-writable so git can't unlink the file inside
+    fs::set_permissions(&stuck_dir, Permissions::from_mode(0o555)).unwrap();
+
+    // Check if permissions actually restrict us (skip if running as root)
+    let test_file = stuck_dir.join("test_write");
+    if fs::write(&test_file, "test").is_ok() {
+        let _ = fs::remove_file(&test_file);
+        fs::set_permissions(&stuck_dir, Permissions::from_mode(0o755)).unwrap();
+        eprintln!("Skipping - running with elevated privileges");
+        return;
+    }
+
+    let output = repo
+        .wt_command()
+        .args(["remove", "--foreground", "feature-stuck"])
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Restore permissions before assertions so TempDir cleanup works
+    restore_dir_permissions(&stuck_dir);
+
+    assert!(
+        !output.status.success(),
+        "Remove should have failed, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("Remaining in directory:"),
+        "Error should show remaining entries, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("stuck/"),
+        "Error should list the stuck directory, got: {stderr}"
+    );
+}
+
+/// Same as above but for the detached HEAD code path.
+#[rstest]
+#[cfg(unix)]
+fn test_remove_foreground_failure_shows_remaining_entries_detached(mut repo: TestRepo) {
+    use std::fs::{self, Permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let worktree_path = repo.add_worktree("feature-stuck-detached");
+
+    // Commit .gitignore, then detach HEAD
+    fs::write(worktree_path.join(".gitignore"), "stuck/\n").unwrap();
+    repo.run_git_in(&worktree_path, &["add", ".gitignore"]);
+    repo.run_git_in(&worktree_path, &["commit", "-m", "Add gitignore"]);
+    repo.detach_head_in_worktree("feature-stuck-detached");
+
+    // Create gitignored directory with a file inside
+    let stuck_dir = worktree_path.join("stuck");
+    fs::create_dir_all(&stuck_dir).unwrap();
+    fs::write(stuck_dir.join("file.txt"), "content").unwrap();
+    fs::set_permissions(&stuck_dir, Permissions::from_mode(0o555)).unwrap();
+
+    // Skip if running as root
+    let test_file = stuck_dir.join("test_write");
+    if fs::write(&test_file, "test").is_ok() {
+        let _ = fs::remove_file(&test_file);
+        fs::set_permissions(&stuck_dir, Permissions::from_mode(0o755)).unwrap();
+        eprintln!("Skipping - running with elevated privileges");
+        return;
+    }
+
+    let output = repo
+        .wt_command()
+        .args(["remove", "--foreground"])
+        .current_dir(&worktree_path)
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    restore_dir_permissions(&stuck_dir);
+
+    assert!(
+        !output.status.success(),
+        "Remove should have failed, got: {stderr}"
+    );
+    assert!(
+        stderr.contains("Remaining in directory:"),
+        "Error should show remaining entries, got: {stderr}"
+    );
+}
+
+/// Worktrees with initialized git submodules should be removable.
+///
+/// Git refuses `git worktree remove` when submodules are initialized,
+/// requiring `--force`. This test verifies that `wt remove --foreground`
+/// handles this automatically (retries with `--force`).
+///
+/// Regression test for <https://github.com/max-sixty/worktrunk/issues/1194>.
+#[rstest]
+fn test_remove_foreground_with_submodules(mut repo: TestRepo) {
+    // Create a local repo to use as a submodule source
+    let sub_source = repo.root_path().parent().unwrap().join("sub-source");
+    std::fs::create_dir_all(&sub_source).unwrap();
+    repo.run_git_in(&sub_source, &["init"]);
+    std::fs::write(sub_source.join("sub.txt"), "submodule content").unwrap();
+    repo.run_git_in(&sub_source, &["add", "sub.txt"]);
+    repo.run_git_in(&sub_source, &["commit", "-m", "sub init"]);
+
+    // Add submodule to the main repo (requires protocol.file.allow=always)
+    let output = repo
+        .git_command()
+        .args([
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            sub_source.to_str().unwrap(),
+            "submod",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "Failed to add submodule: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    repo.run_git(&["commit", "-m", "add submodule"]);
+
+    // Create a worktree and initialize submodules in it
+    let worktree_path = repo.add_worktree("feature-submod");
+    let output = repo
+        .git_command()
+        .current_dir(&worktree_path)
+        .args([
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "update",
+            "--init",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "Failed to init submodule: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Verify the submodule is actually initialized
+    assert!(
+        worktree_path.join("submod").join("sub.txt").exists(),
+        "Submodule should be initialized"
+    );
+
+    // Remove the worktree in foreground mode — should succeed despite submodules
+    let output = repo
+        .wt_command()
+        .args(["remove", "--foreground", "feature-submod"])
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "Remove should succeed with submodules, got: {stderr}"
+    );
+    assert!(
+        !worktree_path.exists(),
+        "Worktree directory should be removed"
+    );
+}
+
+/// Restore write permissions recursively so TempDir cleanup succeeds.
+#[cfg(unix)]
+fn restore_dir_permissions(dir: &std::path::Path) {
+    use std::fs::{self, Permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let _ = fs::set_permissions(dir, Permissions::from_mode(0o755));
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().is_ok_and(|t| t.is_dir()) {
+                restore_dir_permissions(&entry.path());
+            }
+        }
+    }
+}

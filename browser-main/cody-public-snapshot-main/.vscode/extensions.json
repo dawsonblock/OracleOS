@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "sourcegraph.cody-ai",
+    "editorconfig.editorconfig",
+    "ecmel.vscode-html-css",
+    "biomejs.biome",
+    "stylelint.vscode-stylelint"
+  ]
+}

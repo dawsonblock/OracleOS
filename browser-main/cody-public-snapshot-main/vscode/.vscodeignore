@@ -1,0 +1,24 @@
+# To prevent accidental inclusions of .env files etc
+# WE EXCLUDE EVERYTHING BY DEFAULT ... which for some reason has custom
+# semantics https://github.com/microsoft/vscode-vsce/issues/12#issuecomment-306078884
+*
+*/**
+
+# Except a well-defined BOM:
+# annoyingly .vscodeignore doesn't support negations so we can't inlude "everything except .visx"
+
+!dist/webviews/**/*
+!dist/*.js
+!dist/*.js.map
+!dist/*.exe
+!dist/*.wasm
+!dist/*.node
+!dist/*.ttf
+
+!resources/*
+
+!package.json
+!LICENSE
+!README.md
+!CHANDELOG.md
+!package.schema.json

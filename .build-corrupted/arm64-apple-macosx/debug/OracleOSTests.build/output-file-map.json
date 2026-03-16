@@ -1,0 +1,558 @@
+{
+  "": {
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/master.swiftdeps"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/ActionSchema/ActionSchemaTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ActionSchemaTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ActionSchemaTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ActionSchemaTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ActionSchemaTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ActionSchemaTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/BrowserAutomation/BrowserBridgeTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserBridgeTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserBridgeTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserBridgeTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserBridgeTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserBridgeTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/BrowserAutomation/BrowserTargetResolverTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserTargetResolverTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserTargetResolverTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserTargetResolverTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserTargetResolverTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserTargetResolverTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/CodeIntelligence/PatchTargetSelectionTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchTargetSelectionTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchTargetSelectionTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchTargetSelectionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchTargetSelectionTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchTargetSelectionTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/CodeIntelligence/ProgramKnowledgeGraphTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProgramKnowledgeGraphTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProgramKnowledgeGraphTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProgramKnowledgeGraphTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProgramKnowledgeGraphTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProgramKnowledgeGraphTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/CodeIntelligence/RootCauseRankingTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RootCauseRankingTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RootCauseRankingTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RootCauseRankingTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RootCauseRankingTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RootCauseRankingTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/BrowserAutomationTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserAutomationTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserAutomationTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserAutomationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserAutomationTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/BrowserAutomationTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/CodeIntelligenceTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/CoreContractsTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoreContractsTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoreContractsTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoreContractsTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoreContractsTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoreContractsTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/DigitalEngineerLayerTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/DigitalEngineerLayerTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/DigitalEngineerLayerTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/DigitalEngineerLayerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/DigitalEngineerLayerTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/DigitalEngineerLayerTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/ExecutionEnforcementTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionEnforcementTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionEnforcementTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionEnforcementTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionEnforcementTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionEnforcementTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/ExecutionKernelBoundaryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionKernelBoundaryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionKernelBoundaryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionKernelBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionKernelBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionKernelBoundaryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/GovernanceEnforcementTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GovernanceEnforcementTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GovernanceEnforcementTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GovernanceEnforcementTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GovernanceEnforcementTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GovernanceEnforcementTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/GraphAwareLoopTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GraphAwareLoopTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GraphAwareLoopTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GraphAwareLoopTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GraphAwareLoopTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/GraphAwareLoopTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/LLMAdvisorTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LLMAdvisorTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LLMAdvisorTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LLMAdvisorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LLMAdvisorTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LLMAdvisorTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/ObservationChangeDetectorTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ObservationChangeDetectorTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ObservationChangeDetectorTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ObservationChangeDetectorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ObservationChangeDetectorTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ObservationChangeDetectorTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/PatchPipelineTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchPipelineTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchPipelineTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchPipelineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchPipelineTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchPipelineTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/PromptEngineTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PromptEngineTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PromptEngineTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PromptEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PromptEngineTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PromptEngineTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/ProposalEngineTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProposalEngineTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProposalEngineTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProposalEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProposalEngineTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ProposalEngineTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/ReasoningEngineTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ReasoningEngineTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ReasoningEngineTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ReasoningEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ReasoningEngineTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ReasoningEngineTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/RecipeCompatibilityTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecipeCompatibilityTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecipeCompatibilityTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecipeCompatibilityTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecipeCompatibilityTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecipeCompatibilityTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/SafeRuntimeTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SafeRuntimeTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SafeRuntimeTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SafeRuntimeTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SafeRuntimeTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SafeRuntimeTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/StrategyLayerTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyLayerTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyLayerTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyLayerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyLayerTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyLayerTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/SystemIntelligenceUpgradeTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SystemIntelligenceUpgradeTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SystemIntelligenceUpgradeTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SystemIntelligenceUpgradeTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SystemIntelligenceUpgradeTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SystemIntelligenceUpgradeTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/TargetResolutionTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolutionTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolutionTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolutionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolutionTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolutionTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/TraceStoreTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceStoreTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceStoreTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceStoreTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceStoreTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceStoreTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/WorkflowSynthesisTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowSynthesisTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowSynthesisTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowSynthesisTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowSynthesisTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowSynthesisTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/WorldModelAgentLoopWiringTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelAgentLoopWiringTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelAgentLoopWiringTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelAgentLoopWiringTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelAgentLoopWiringTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelAgentLoopWiringTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Core/WorldModelTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorldModelTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Critic/CriticLoopTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CriticLoopTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CriticLoopTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CriticLoopTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CriticLoopTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CriticLoopTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Diagnostics/MetricsRecorderTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MetricsRecorderTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MetricsRecorderTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MetricsRecorderTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MetricsRecorderTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MetricsRecorderTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Experiments/ExperimentLimitsTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExperimentLimitsTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExperimentLimitsTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExperimentLimitsTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExperimentLimitsTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExperimentLimitsTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Experiments/PatchExperimentRunnerTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchExperimentRunnerTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchExperimentRunnerTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchExperimentRunnerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchExperimentRunnerTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PatchExperimentRunnerTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/AgentLoopBoundaryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AgentLoopBoundaryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AgentLoopBoundaryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AgentLoopBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AgentLoopBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AgentLoopBoundaryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/ArchitectureFreezeTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ArchitectureFreezeTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ArchitectureFreezeTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ArchitectureFreezeTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ArchitectureFreezeTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ArchitectureFreezeTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/CodeIntelligenceBoundaryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceBoundaryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceBoundaryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CodeIntelligenceBoundaryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/CoordinatorBoundaryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoordinatorBoundaryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoordinatorBoundaryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoordinatorBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoordinatorBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CoordinatorBoundaryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/ExecutionBoundaryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionBoundaryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionBoundaryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ExecutionBoundaryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/KnowledgePromotionTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/KnowledgePromotionTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/KnowledgePromotionTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/KnowledgePromotionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/KnowledgePromotionTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/KnowledgePromotionTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/MemoryBoundaryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryBoundaryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryBoundaryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryBoundaryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/NoBypassExecutionTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/NoBypassExecutionTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/NoBypassExecutionTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/NoBypassExecutionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/NoBypassExecutionTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/NoBypassExecutionTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Governance/PlannerBoundaryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerBoundaryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerBoundaryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerBoundaryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerBoundaryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerBoundaryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/HostAutomation/TargetResolverTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolverTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolverTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolverTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolverTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TargetResolverTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/LocatorBuilderTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LocatorBuilderTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LocatorBuilderTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LocatorBuilderTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LocatorBuilderTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/LocatorBuilderTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Memory/MemoryDecisionBiasTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryDecisionBiasTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryDecisionBiasTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryDecisionBiasTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryDecisionBiasTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/MemoryDecisionBiasTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Memory/RecoveryMemoryInfluenceTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryMemoryInfluenceTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryMemoryInfluenceTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryMemoryInfluenceTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryMemoryInfluenceTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryMemoryInfluenceTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Memory/TraceCompressionTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceCompressionTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceCompressionTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceCompressionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceCompressionTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceCompressionTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Memory/WorkflowMemoryInfluenceTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowMemoryInfluenceTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowMemoryInfluenceTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowMemoryInfluenceTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowMemoryInfluenceTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowMemoryInfluenceTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Planning/AmbiguousTargetRecoveryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AmbiguousTargetRecoveryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AmbiguousTargetRecoveryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AmbiguousTargetRecoveryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AmbiguousTargetRecoveryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/AmbiguousTargetRecoveryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Planning/PathSearchCycleControlTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PathSearchCycleControlTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PathSearchCycleControlTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PathSearchCycleControlTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PathSearchCycleControlTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PathSearchCycleControlTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Planning/PlanEvaluatorTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanEvaluatorTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanEvaluatorTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanEvaluatorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanEvaluatorTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanEvaluatorTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Planning/PlannerPlanSelectionTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerPlanSelectionTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerPlanSelectionTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerPlanSelectionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerPlanSelectionTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlannerPlanSelectionTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Planning/TaskGraphTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TaskGraphTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TaskGraphTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TaskGraphTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TaskGraphTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TaskGraphTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Planning/UpgradePhaseTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/UpgradePhaseTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/UpgradePhaseTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/UpgradePhaseTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/UpgradePhaseTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/UpgradePhaseTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/PlanningGraph/PlanningGraphEngineTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanningGraphEngineTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanningGraphEngineTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanningGraphEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanningGraphEngineTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/PlanningGraphEngineTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Recovery/FailureClassifierTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/FailureClassifierTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/FailureClassifierTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/FailureClassifierTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/FailureClassifierTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/FailureClassifierTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Recovery/RecoveryModeStrategyTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryModeStrategyTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryModeStrategyTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryModeStrategyTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryModeStrategyTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryModeStrategyTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Recovery/RecoveryPlannerTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryPlannerTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryPlannerTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryPlannerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryPlannerTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RecoveryPlannerTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Recovery/VerifiedRecoveryPathTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/VerifiedRecoveryPathTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/VerifiedRecoveryPathTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/VerifiedRecoveryPathTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/VerifiedRecoveryPathTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/VerifiedRecoveryPathTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Runtime/RuntimeCoordinatorTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RuntimeCoordinatorTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RuntimeCoordinatorTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RuntimeCoordinatorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RuntimeCoordinatorTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/RuntimeCoordinatorTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Runtime/WorkspaceRunnerCommandPolicyTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkspaceRunnerCommandPolicyTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkspaceRunnerCommandPolicyTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkspaceRunnerCommandPolicyTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkspaceRunnerCommandPolicyTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkspaceRunnerCommandPolicyTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Search/CandidateGeneratorTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateGeneratorTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateGeneratorTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateGeneratorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateGeneratorTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateGeneratorTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Search/CandidateResultTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateResultTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateResultTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateResultTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateResultTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateResultTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Search/CandidateTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/CandidateTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Search/ResultSelectorTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ResultSelectorTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ResultSelectorTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ResultSelectorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ResultSelectorTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/ResultSelectorTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Search/SearchControllerTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SearchControllerTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SearchControllerTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SearchControllerTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SearchControllerTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/SearchControllerTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/StateAbstraction/StateAbstractionEngineTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateAbstractionEngineTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateAbstractionEngineTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateAbstractionEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateAbstractionEngineTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateAbstractionEngineTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/StateMemory/StateMemoryIndexTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateMemoryIndexTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateMemoryIndexTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateMemoryIndexTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateMemoryIndexTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StateMemoryIndexTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Strategy/StrategyDiagnosticsTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyDiagnosticsTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyDiagnosticsTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyDiagnosticsTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyDiagnosticsTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyDiagnosticsTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Strategy/StrategyPersistenceTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyPersistenceTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyPersistenceTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyPersistenceTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyPersistenceTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyPersistenceTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Strategy/StrategyScopedLLMPlanTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedLLMPlanTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedLLMPlanTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedLLMPlanTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedLLMPlanTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedLLMPlanTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Strategy/StrategyScopedMemoryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedMemoryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedMemoryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedMemoryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedMemoryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedMemoryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Strategy/StrategyScopedPlanTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedPlanTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedPlanTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedPlanTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedPlanTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedPlanTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Strategy/StrategyScopedWorkflowTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedWorkflowTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedWorkflowTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedWorkflowTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedWorkflowTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategyScopedWorkflowTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Strategy/StrategySelectionTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategySelectionTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategySelectionTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategySelectionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategySelectionTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/StrategySelectionTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/TraceReplay/TraceReplayEngineTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceReplayEngineTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceReplayEngineTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceReplayEngineTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceReplayEngineTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/TraceReplayEngineTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Workflows/WorkflowConfidenceTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowConfidenceTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowConfidenceTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowConfidenceTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowConfidenceTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowConfidenceTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Workflows/WorkflowDiscoveryTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowDiscoveryTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowDiscoveryTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowDiscoveryTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowDiscoveryTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowDiscoveryTests.dia"
+  },
+  "/Users/dawsonblock/Downloads/Oracle-OS-main-4/Tests/OracleOSTests/Workflows/WorkflowParameterizationTests.swift": {
+    "dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowParameterizationTests.d",
+    "object": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowParameterizationTests.swift.o",
+    "swiftmodule": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowParameterizationTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowParameterizationTests.swiftdeps",
+    "diagnostics": "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOSTests.build/WorkflowParameterizationTests.dia"
+  }
+}

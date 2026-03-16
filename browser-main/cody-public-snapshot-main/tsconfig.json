@@ -1,0 +1,36 @@
+{
+  "extends": "@sourcegraph/tsconfig",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "commonjs",
+    "strict": true,
+    "lib": ["ESNext"],
+    "isolatedModules": false,
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "noErrorTruncation": true,
+    "resolveJsonModule": true,
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": [".config/*.ts"],
+  "exclude": ["dist", "node_modules", "typehacks", ".test"],
+  "watchOptions": {
+    "watchFile": "useFsEvents",
+    "watchDirectory": "useFsEvents",
+    "fallbackPolling": "dynamicPriority"
+  },
+  "references": [
+    { "path": "agent" },
+    { "path": "lib/shared" },
+    { "path": "lib/prompt-editor" },
+    { "path": "vscode" },
+    { "path": "vscode/test/integration" },
+    { "path": "vscode/scripts" },
+    { "path": "web" }
+  ]
+}

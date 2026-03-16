@@ -1,0 +1,57 @@
+{
+  "name": "@sourcegraph/cody-shared",
+  "version": "0.0.10",
+  "description": "Cody shared library",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sourcegraph/cody",
+    "directory": "lib/shared"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "src", "!**/*.test.*"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc --build",
+    "test": "vitest",
+    "prepublishOnly": "tsc --build --clean && pnpm run build"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.22.0",
+    "@microsoft/fetch-event-source": "^2.0.1",
+    "@opentelemetry/api": "^1.7.0",
+    "crypto-js": "^4.2.0",
+    "date-fns": "^2.30.0",
+    "dedent": "^0.7.0",
+    "detect-browser": "^5.3.0",
+    "diff": "^5.2.0",
+    "env-paths": "^2.2.1",
+    "gpt-tokenizer": "^2.9.0",
+    "immer": "^10.1.1",
+    "isomorphic-fetch": "^3.0.0",
+    "js-tiktoken": "^1.0.14",
+    "lexical": "^0.17.0",
+    "lodash": "^4.17.21",
+    "lru-cache": "^10.0.0",
+    "ollama": "^0.5.1",
+    "re2js": "^0.4.1",
+    "semver": "^7.5.4",
+    "vscode-uri": "^3.0.8",
+    "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "@sourcegraph/cody-context-filters-test-dataset": "^1.0.0",
+    "@types/crypto-js": "^4.2.2",
+    "@types/dedent": "^0.7.0",
+    "@types/diff": "^5.0.9",
+    "@types/isomorphic-fetch": "^0.0.39",
+    "@types/lodash": "^4.14.195",
+    "@types/node-fetch": "^2.6.4",
+    "@types/semver": "^7.5.8",
+    "@types/vscode": "^1.80.0",
+    "agent-base": "^7.1.1",
+    "type-fest": "^4.26.1"
+  }
+}
