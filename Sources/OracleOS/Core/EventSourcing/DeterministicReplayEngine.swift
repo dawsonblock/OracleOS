@@ -27,8 +27,8 @@ extension WorldState {
     static var empty: WorldState {
         // Initializing a baseline state
         WorldState(
-            observation: Observation(app: "system", elements: []),
-            planningState: PlanningState()
+            observation: Observation(app: "system", elements: [])
         )
     }
+}
 }
