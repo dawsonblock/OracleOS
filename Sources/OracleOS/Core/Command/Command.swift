@@ -46,7 +46,7 @@ public struct ActionCommand: Codable, Sendable, Identifiable {
     }
 }
 
-public enum ActionRetryPolicy: String, Codable, Sendable {
+public enum ActionRetryPolicy: Codable, Sendable {
     case none
     case simple(maxRetries: Int)
     case exponentialBackoff(maxRetries: Int, baseDelay: TimeInterval)
