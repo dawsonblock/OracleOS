@@ -1,7 +1,7 @@
 import Foundation
 
 /// A structured projection of the world state, derived from the event log.
-public struct WorldState: Codable, Sendable {
+public struct WorldStateProjection: Codable, Sendable {
     public let timestamp: Date
     public let ui: UIProjection
     public let workspace: WorkspaceProjection
