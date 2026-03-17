@@ -13,6 +13,8 @@ public final class VerifiedActionExecutor {
     private let taskGraphStore: TaskGraphStore?
     private let stateMemoryIndex: StateMemoryIndex?
     private let planningGraphStore: PlanningGraphStore?
+    private let validator: CommandValidator
+    private let eventStore: DurableEventStore
 
     public init(
         verificationTimeout: TimeInterval = 1.5,
@@ -25,7 +27,9 @@ public final class VerifiedActionExecutor {
         graphStore: GraphStore? = nil,
         taskGraphStore: TaskGraphStore? = nil,
         stateMemoryIndex: StateMemoryIndex? = nil,
-        planningGraphStore: PlanningGraphStore? = nil
+        planningGraphStore: PlanningGraphStore? = nil,
+        validator: CommandValidator = CommandValidator(),
+        eventStore: DurableEventStore = DurableEventStore()
     ) {
         self.verificationTimeout = verificationTimeout
         self.stateAbstraction = stateAbstraction
@@ -38,14 +42,122 @@ public final class VerifiedActionExecutor {
         self.taskGraphStore = taskGraphStore
         self.stateMemoryIndex = stateMemoryIndex
         self.planningGraphStore = planningGraphStore
+        self.validator = validator
+        self.eventStore = eventStore
     }
 
-    /// Execute an action within the verified trust boundary.
+    /// Execute an action command within the verified trust boundary.
     ///
     /// This method is the **sole authority** for environment mutations.
-    /// Every side-effect-producing closure must pass through `run()` so that
-    /// pre/post observations are captured, the critic can judge the outcome,
-    /// and the result is stamped with `executedThroughExecutor = true`.
+    /// Every side-effect-producing command must pass through `execute()` so that
+    /// pre/post observations are captured, parameters are validated,
+    /// and the result is structurally recorded.
+    public func execute(
+        command: ActionCommand,
+        perform: () -> ToolResult
+    ) -> ExecutionResult {
+        let startTime = Date()
+        let traceId = command.traceId
+
+        // 1. Log Command Issued (WAL)
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .commandIssued,
+            commandId: command.id,
+            payload: ["action": command.intent.action, "app": command.intent.app]
+        ))
+
+        // 2. Pre-flight Validation
+        let validation = validator.validate(command)
+        switch validation {
+        case .valid:
+            try? eventStore.append(event: ExecutionEvent(
+                id: UUID(),
+                timestamp: Date(),
+                type: .commandValidated,
+                commandId: command.id,
+                payload: [:]
+            ))
+        case .invalid(let reason, let failureType):
+            return ExecutionResult(
+                commandId: command.id,
+                durationMs: 0,
+                exitReason: .failed,
+                failureType: failureType,
+                evidence: ["validation_error": reason]
+            )
+        }
+
+        // 3. Pre-observation & Logging
+        let preObservation = ObservationBuilder.capture(appName: command.intent.app)
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .stateChanged,
+            commandId: command.id,
+            payload: ["phase": "pre", "observation_hash": preObservation.stableHash()]
+        ))
+        
+        // 4. Execution via closure
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .commandExecuting,
+            commandId: command.id,
+            payload: [:]
+        ))
+        let toolResult = perform()
+        
+        // G-1.2: Enforcement precondition to prevent spoofing of verified status.
+        precondition(
+            toolResult.data?["executed_through_executor"] as? Bool != true,
+            "[VerifiedActionExecutor] Security violation: ToolResult attempted to spoof verified status."
+        )
+
+        // 5. Post-observation & Verification
+        let (postObservation, verification, timedOut) = captureVerifiedPostObservation(
+            appName: command.intent.app,
+            conditions: command.intent.postconditions
+        )
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .stateChanged,
+            commandId: command.id,
+            payload: ["phase": "post", "observation_hash": postObservation.id, "verified": String(verification)]
+        ))
+
+        let duration = Int(Date().timeIntervalSince(startTime) * 1000)
+        
+        // 6. Finalization & WAL Completion
+        let toolFailed = !toolResult.success || toolResult.error != nil
+        let exitReason: ExecutionExitReason = timedOut ? .timeout : (toolFailed ? .failed : .complete)
+        
+        var evidence = toolResult.data?.mapValues { String(describing: $0) } ?? [:]
+        evidence["traceId"] = traceId
+        evidence["verification"] = String(describing: verification)
+
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .commandCompleted,
+            commandId: command.id,
+            payload: ["exit_reason": exitReason.rawValue]
+        ))
+
+        return ExecutionResult(
+            commandId: command.id,
+            durationMs: duration,
+            exitReason: exitReason,
+            failureType: toolFailed ? .toolError : nil,
+            evidence: evidence,
+            postconditionStatus: [:] 
+        )
+    }
+
+    /// Execute an action within the legacy trust boundary (Deprecated).
+    @available(*, deprecated, message: "Use execute(command:perform:) instead")
     public func run(
         taskID: String? = nil,
         toolName: String? = nil,
