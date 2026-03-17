@@ -1,7 +1,7 @@
 import Foundation
 
 /// Defines the objective of a user-initiated or agent-generated task.
-public struct Goal: Codable, Sendable, Identifiable {
+public struct GoalRecord: Codable, Sendable, Identifiable {
     public let id: UUID
     public let title: String
     public let objective: String
