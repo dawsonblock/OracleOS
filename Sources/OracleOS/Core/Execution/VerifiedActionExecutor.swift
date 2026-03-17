@@ -96,7 +96,7 @@ public final class VerifiedActionExecutor {
             timestamp: Date(),
             type: .stateChanged,
             commandId: command.id,
-            payload: ["phase": "pre", "observation_hash": preObservation.id]
+            payload: ["phase": "pre", "observation_hash": preObservation.stableHash()]
         ))
         
         // 4. Execution via closure
