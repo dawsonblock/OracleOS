@@ -14,6 +14,7 @@ public final class VerifiedActionExecutor {
     private let stateMemoryIndex: StateMemoryIndex?
     private let planningGraphStore: PlanningGraphStore?
     private let validator: CommandValidator
+    private let eventStore: DurableEventStore
 
     public init(
         verificationTimeout: TimeInterval = 1.5,
@@ -27,7 +28,8 @@ public final class VerifiedActionExecutor {
         taskGraphStore: TaskGraphStore? = nil,
         stateMemoryIndex: StateMemoryIndex? = nil,
         planningGraphStore: PlanningGraphStore? = nil,
-        validator: CommandValidator = CommandValidator()
+        validator: CommandValidator = CommandValidator(),
+        eventStore: DurableEventStore = DurableEventStore()
     ) {
         self.verificationTimeout = verificationTimeout
         self.stateAbstraction = stateAbstraction
@@ -41,6 +43,7 @@ public final class VerifiedActionExecutor {
         self.stateMemoryIndex = stateMemoryIndex
         self.planningGraphStore = planningGraphStore
         self.validator = validator
+        self.eventStore = eventStore
     }
 
     /// Execute an action command within the verified trust boundary.
@@ -56,11 +59,26 @@ public final class VerifiedActionExecutor {
         let startTime = Date()
         let traceId = command.traceId
 
-        // 1. Pre-flight Validation
+        // 1. Log Command Issued (WAL)
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .commandIssued,
+            commandId: command.id,
+            payload: ["action": command.intent.action, "app": command.intent.app]
+        ))
+
+        // 2. Pre-flight Validation
         let validation = validator.validate(command)
         switch validation {
         case .valid:
-            break
+            try? eventStore.append(event: ExecutionEvent(
+                id: UUID(),
+                timestamp: Date(),
+                type: .commandValidated,
+                commandId: command.id,
+                payload: [:]
+            ))
         case .invalid(let reason, let failureType):
             return ExecutionResult(
                 commandId: command.id,
@@ -71,10 +89,24 @@ public final class VerifiedActionExecutor {
             )
         }
 
-        // 2. Pre-observation
+        // 3. Pre-observation & Logging
         let preObservation = ObservationBuilder.capture(appName: command.intent.app)
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .stateChanged,
+            commandId: command.id,
+            payload: ["phase": "pre", "observation_hash": preObservation.id]
+        ))
         
-        // 3. Execution via closure
+        // 4. Execution via closure
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .commandExecuting,
+            commandId: command.id,
+            payload: [:]
+        ))
         let toolResult = perform()
         
         // G-1.2: Enforcement precondition to prevent spoofing of verified status.
@@ -83,20 +115,35 @@ public final class VerifiedActionExecutor {
             "[VerifiedActionExecutor] Security violation: ToolResult attempted to spoof verified status."
         )
 
-        // 4. Post-observation & Verification
+        // 5. Post-observation & Verification
         let (postObservation, verification, timedOut) = captureVerifiedPostObservation(
             appName: command.intent.app,
             conditions: command.intent.postconditions
         )
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .stateChanged,
+            commandId: command.id,
+            payload: ["phase": "post", "observation_hash": postObservation.id, "verified": String(verification)]
+        ))
 
         let duration = Int(Date().timeIntervalSince(startTime) * 1000)
         
-        // 5. Critic & Finalization (Mocked logic for now, keeping existing flow)
+        // 6. Finalization & WAL Completion
         let exitReason: ExecutionExitReason = timedOut ? .timeout : (toolResult.isError ? .failed : .complete)
         
         var evidence = toolResult.data?.mapValues { String(describing: $0) } ?? [:]
         evidence["traceId"] = traceId
         evidence["verification"] = String(describing: verification)
+
+        try? eventStore.append(event: ExecutionEvent(
+            id: UUID(),
+            timestamp: Date(),
+            type: .commandCompleted,
+            commandId: command.id,
+            payload: ["exit_reason": exitReason.rawValue]
+        ))
 
         return ExecutionResult(
             commandId: command.id,
@@ -104,7 +151,7 @@ public final class VerifiedActionExecutor {
             exitReason: exitReason,
             failureType: toolResult.isError ? .toolError : nil,
             evidence: evidence,
-            postconditionStatus: [:] // To be populated by verification logic
+            postconditionStatus: [:] 
         )
     }
 
