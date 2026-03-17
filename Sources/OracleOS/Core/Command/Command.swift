@@ -50,6 +50,51 @@ public enum ActionRetryPolicy: Codable, Sendable {
     case none
     case simple(maxRetries: Int)
     case exponentialBackoff(maxRetries: Int, baseDelay: TimeInterval)
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case maxRetries
+        case baseDelay
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+
+        switch type {
+        case "none":
+            self = .none
+        case "simple":
+            let maxRetries = try container.decode(Int.self, forKey: .maxRetries)
+            self = .simple(maxRetries: maxRetries)
+        case "exponentialBackoff":
+            let maxRetries = try container.decode(Int.self, forKey: .maxRetries)
+            let baseDelay = try container.decode(TimeInterval.self, forKey: .baseDelay)
+            self = .exponentialBackoff(maxRetries: maxRetries, baseDelay: baseDelay)
+        default:
+            let context = DecodingError.Context(
+                codingPath: container.codingPath,
+                debugDescription: "Unknown ActionRetryPolicy type '\(type)'"
+            )
+            throw DecodingError.dataCorrupted(context)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+        case .none:
+            try container.encode("none", forKey: .type)
+        case .simple(let maxRetries):
+            try container.encode("simple", forKey: .type)
+            try container.encode(maxRetries, forKey: .maxRetries)
+        case .exponentialBackoff(let maxRetries, let baseDelay):
+            try container.encode("exponentialBackoff", forKey: .type)
+            try container.encode(maxRetries, forKey: .maxRetries)
+            try container.encode(baseDelay, forKey: .baseDelay)
+        }
+    }
 }
 
 extension ActionIntent {
