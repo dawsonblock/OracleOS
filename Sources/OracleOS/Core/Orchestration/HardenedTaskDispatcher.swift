@@ -20,7 +20,7 @@ public final class HardenedTaskDispatcher: Sendable {
         targetNodeId: String
     ) async throws -> ExecutionResult {
         // 1. Log Dispatch Event
-        try? eventStore.append(event: ExecutionEvent(
+        try eventStore.append(event: ExecutionEvent(
             id: UUID(),
             timestamp: Date(),
             type: .commandIssued,
