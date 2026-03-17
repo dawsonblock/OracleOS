@@ -18,7 +18,7 @@ public final class CommandValidator: Sendable {
 
         // 2. Validate action-specific constraints.
         switch command.intent.action {
-        case "click" where command.intent.x == nil && command.intent.domID == nil && command.intent.query == nil:
+        case "click" where (command.intent.x == nil || command.intent.y == nil) && command.intent.domID == nil && command.intent.query == nil:
             return .invalid(reason: "Click action requires at least one target identifier (x/y, domID, or query).", failureType: .preconditionViolation)
         case "type" where command.intent.text == nil:
              return .invalid(reason: "Type action requires 'text' parameter.", failureType: .preconditionViolation)
