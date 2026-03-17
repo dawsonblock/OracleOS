@@ -12,7 +12,7 @@ public final class ClusterCoordinator: Sendable {
     /// Transitions this node between Leader and Follower status.
     public func transition(to role: ClusterRole) async throws {
         // Log transition event
-        try? eventStore.append(event: ExecutionEvent(
+        try eventStore.append(event: ExecutionEvent(
             id: UUID(),
             timestamp: Date(),
             type: .stateChanged,
