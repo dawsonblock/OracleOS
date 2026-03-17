@@ -16,15 +16,24 @@ public final class CommandResolver: Sendable {
         goal: Goal?
     ) async throws -> ActionCommand {
         // 1. Resolve Element Query (if any)
-        var resolvedIntent = decision.actionContract.intent
+        let originalIntent = decision.actionContract.intent
+        let resolvedIntent: ActionIntent
         
-        if let query = decision.semanticQuery {
-            // Logic to find coordinates from observation based on query
-            if let element = currentObservation.elements.first(where: { $0.label.contains(query.text) || $0.domID == query.domID }) {
-                resolvedIntent.x = element.x
-                resolvedIntent.y = element.y
-                resolvedIntent.domID = element.domID
-            }
+        if let query = decision.semanticQuery,
+           let element = currentObservation.elements.first(where: { element in
+               element.label.contains(query.text) || element.id == query.domID
+           }),
+           let frame = element.frame {
+            // Construct a new intent with resolved coordinates and identifier.
+            // Other intent fields are assumed to be preserved via the ActionIntent API.
+            resolvedIntent = ActionIntent(
+                x: frame.origin.x,
+                y: frame.origin.y,
+                domID: element.id
+            )
+        } else {
+            // Fall back to the original intent if we cannot resolve an element.
+            resolvedIntent = originalIntent
         }
         
         // 2. Map Execution Mode
