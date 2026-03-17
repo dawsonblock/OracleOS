@@ -1,7 +1,7 @@
 import Foundation
 
 /// A structured summary of the environment observed at a specific points in time.
-public struct Observation: Codable, Sendable {
+public struct SupportObservation: Codable, Sendable {
     public let id: UUID
     public let timestamp: Date
     public let provenance: ObservationProvenance
