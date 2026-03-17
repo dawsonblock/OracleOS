@@ -13,6 +13,7 @@ public final class VerifiedActionExecutor {
     private let taskGraphStore: TaskGraphStore?
     private let stateMemoryIndex: StateMemoryIndex?
     private let planningGraphStore: PlanningGraphStore?
+    private let validator: CommandValidator
 
     public init(
         verificationTimeout: TimeInterval = 1.5,
@@ -25,7 +26,8 @@ public final class VerifiedActionExecutor {
         graphStore: GraphStore? = nil,
         taskGraphStore: TaskGraphStore? = nil,
         stateMemoryIndex: StateMemoryIndex? = nil,
-        planningGraphStore: PlanningGraphStore? = nil
+        planningGraphStore: PlanningGraphStore? = nil,
+        validator: CommandValidator = CommandValidator()
     ) {
         self.verificationTimeout = verificationTimeout
         self.stateAbstraction = stateAbstraction
@@ -38,14 +40,76 @@ public final class VerifiedActionExecutor {
         self.taskGraphStore = taskGraphStore
         self.stateMemoryIndex = stateMemoryIndex
         self.planningGraphStore = planningGraphStore
+        self.validator = validator
     }
 
-    /// Execute an action within the verified trust boundary.
+    /// Execute an action command within the verified trust boundary.
     ///
     /// This method is the **sole authority** for environment mutations.
-    /// Every side-effect-producing closure must pass through `run()` so that
-    /// pre/post observations are captured, the critic can judge the outcome,
-    /// and the result is stamped with `executedThroughExecutor = true`.
+    /// Every side-effect-producing command must pass through `execute()` so that
+    /// pre/post observations are captured, parameters are validated,
+    /// and the result is structurally recorded.
+    public func execute(
+        command: ActionCommand,
+        perform: () -> ToolResult
+    ) -> ExecutionResult {
+        let startTime = Date()
+        let traceId = command.traceId
+
+        // 1. Pre-flight Validation
+        let validation = validator.validate(command)
+        switch validation {
+        case .valid:
+            break
+        case .invalid(let reason, let failureType):
+            return ExecutionResult(
+                commandId: command.id,
+                durationMs: 0,
+                exitReason: .failed,
+                failureType: failureType,
+                evidence: ["validation_error": reason]
+            )
+        }
+
+        // 2. Pre-observation
+        let preObservation = ObservationBuilder.capture(appName: command.intent.app)
+        
+        // 3. Execution via closure
+        let toolResult = perform()
+        
+        // G-1.2: Enforcement precondition to prevent spoofing of verified status.
+        precondition(
+            toolResult.data?["executed_through_executor"] as? Bool != true,
+            "[VerifiedActionExecutor] Security violation: ToolResult attempted to spoof verified status."
+        )
+
+        // 4. Post-observation & Verification
+        let (postObservation, verification, timedOut) = captureVerifiedPostObservation(
+            appName: command.intent.app,
+            conditions: command.intent.postconditions
+        )
+
+        let duration = Int(Date().timeIntervalSince(startTime) * 1000)
+        
+        // 5. Critic & Finalization (Mocked logic for now, keeping existing flow)
+        let exitReason: ExecutionExitReason = timedOut ? .timeout : (toolResult.isError ? .failed : .complete)
+        
+        var evidence = toolResult.data?.mapValues { String(describing: $0) } ?? [:]
+        evidence["traceId"] = traceId
+        evidence["verification"] = String(describing: verification)
+
+        return ExecutionResult(
+            commandId: command.id,
+            durationMs: duration,
+            exitReason: exitReason,
+            failureType: toolResult.isError ? .toolError : nil,
+            evidence: evidence,
+            postconditionStatus: [:] // To be populated by verification logic
+        )
+    }
+
+    /// Execute an action within the legacy trust boundary (Deprecated).
+    @available(*, deprecated, message: "Use execute(command:perform:) instead")
     public func run(
         taskID: String? = nil,
         toolName: String? = nil,
