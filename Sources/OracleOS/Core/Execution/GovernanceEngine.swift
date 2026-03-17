@@ -24,7 +24,8 @@ public final class GovernanceEngine: Sendable {
 
         // 2. Resource Exclusivity (Phase 13 logic)
         // Ensure no other node is operating on the target app
-        _ = try await lockManager.acquire(resource: command.intent.app)
+        let lockId = try await lockManager.acquire(resource: command.intent.app)
+        // TODO: Ensure the lock is released using the lockId
         
         // 3. (Phase 21-25 logic) Check safety policies
         return .approved
