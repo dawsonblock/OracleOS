@@ -131,7 +131,8 @@ public final class VerifiedActionExecutor {
         let duration = Int(Date().timeIntervalSince(startTime) * 1000)
         
         // 6. Finalization & WAL Completion
-        let exitReason: ExecutionExitReason = timedOut ? .timeout : (toolResult.isError ? .failed : .complete)
+        let toolFailed = !toolResult.success || toolResult.error != nil
+        let exitReason: ExecutionExitReason = timedOut ? .timeout : (toolFailed ? .failed : .complete)
         
         var evidence = toolResult.data?.mapValues { String(describing: $0) } ?? [:]
         evidence["traceId"] = traceId
@@ -149,7 +150,7 @@ public final class VerifiedActionExecutor {
             commandId: command.id,
             durationMs: duration,
             exitReason: exitReason,
-            failureType: toolResult.isError ? .toolError : nil,
+            failureType: toolFailed ? .toolError : nil,
             evidence: evidence,
             postconditionStatus: [:] 
         )
