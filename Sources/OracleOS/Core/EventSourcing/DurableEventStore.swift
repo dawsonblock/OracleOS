@@ -18,7 +18,9 @@ public final class DurableEventStore: Sendable {
             handle.write("\n".data(using: .utf8)!)
             handle.closeFile()
         } else {
-            try data.write(to: storageURL)
+            var lineData = data
+            lineData.append("\n".data(using: .utf8)!)
+            try lineData.write(to: storageURL)
         }
     }
 }
