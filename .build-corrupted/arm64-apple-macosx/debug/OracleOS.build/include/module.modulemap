@@ -1,3 +1,0 @@
-module OracleOS {
-    header "/Users/dawsonblock/Downloads/Oracle-OS-main-4/.build/arm64-apple-macosx/debug/OracleOS.build/include/OracleOS-Swift.h"
-}

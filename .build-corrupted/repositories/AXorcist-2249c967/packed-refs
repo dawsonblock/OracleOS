@@ -1,8 +1,0 @@
-# pack-refs with: peeled fully-peeled sorted 
-c75d06f7f93e264a9786edc2b78c04973061cb2f refs/heads/main
-27cf1b3552adf74bd9e4a1100e24bd430aabae2c refs/heads/test-ci-workflow
-27cf1b3552adf74bd9e4a1100e24bd430aabae2c refs/pull/1/head
-756c3ed726598aaa39f83119ae2392c194206658 refs/pull/4/head
-027a3233fee148ae7c67d322a6cea78c88c64be4 refs/pull/4/merge
-16ecdbf1d75bda18dc420cdbd63e868b051a4eec refs/tags/v0.1.0
-^c75d06f7f93e264a9786edc2b78c04973061cb2f
