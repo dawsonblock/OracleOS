@@ -15,6 +15,11 @@ else
 fi
 
 echo "==> Running architecture governance tests..."
-swift test --filter Governance 2>&1 || true
+if swift test --filter Governance 2>&1; then
+    echo "  All governance tests passed."
+else
+    echo "  WARNING: Governance test failures detected. Review output above."
+    exit 1
+fi
 
 echo "==> Lint pass complete."

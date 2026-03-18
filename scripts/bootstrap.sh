@@ -11,6 +11,10 @@ echo "==> Building all targets..."
 swift build
 
 echo "==> Running tests..."
-swift test || true
+if swift test; then
+    echo "  All tests passed."
+else
+    echo "  WARNING: Some tests failed. Review output above."
+fi
 
 echo "==> Bootstrap complete."
