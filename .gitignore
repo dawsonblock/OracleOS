@@ -29,6 +29,9 @@ vision-sidecar/build/
 vision-sidecar/dist/
 *.spec
 
+# Corrupted / stale build directories
+.build-corrupted/
+
 # Artifacts
 build.log
 test.log
