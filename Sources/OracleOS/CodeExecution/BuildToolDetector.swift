@@ -38,7 +38,7 @@ public enum BuildToolDetector {
         case .swiftPackage:
             return CommandSpec(
                 category: .build,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["swift", "build"],
                 workspaceRoot: workspaceRoot.path,
                 summary: "swift build"
@@ -46,7 +46,7 @@ public enum BuildToolDetector {
         case .npm:
             return CommandSpec(
                 category: .build,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["npm", "run", "build"],
                 workspaceRoot: workspaceRoot.path,
                 summary: "npm run build"
@@ -54,7 +54,7 @@ public enum BuildToolDetector {
         case .xcodebuild:
             return CommandSpec(
                 category: .build,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["xcodebuild", "-quiet"],
                 workspaceRoot: workspaceRoot.path,
                 summary: "xcodebuild -quiet"
@@ -72,7 +72,7 @@ public enum BuildToolDetector {
         case .swiftPackage:
             return CommandSpec(
                 category: .test,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["swift", "test"],
                 workspaceRoot: workspaceRoot.path,
                 summary: "swift test"
@@ -80,7 +80,7 @@ public enum BuildToolDetector {
         case .npm:
             return CommandSpec(
                 category: .test,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["npm", "test", "--", "--runInBand"],
                 workspaceRoot: workspaceRoot.path,
                 summary: "npm test"
@@ -88,7 +88,7 @@ public enum BuildToolDetector {
         case .pytest:
             return CommandSpec(
                 category: .test,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["pytest"],
                 workspaceRoot: workspaceRoot.path,
                 summary: "pytest"
@@ -96,7 +96,7 @@ public enum BuildToolDetector {
         case .xcodebuild:
             return CommandSpec(
                 category: .test,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["xcodebuild", "test", "-quiet"],
                 workspaceRoot: workspaceRoot.path,
                 summary: "xcodebuild test -quiet"

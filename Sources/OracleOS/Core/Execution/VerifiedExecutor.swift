@@ -14,6 +14,11 @@ public struct VerifiedProcessResult: Sendable, Equatable {
 }
 
 public final class VerifiedExecutor: @unchecked Sendable {
+    public static let shellExecutablePath = "/bin/bash"
+    public static let loginShellExecutablePath = "/bin/zsh"
+    public static let envExecutablePath = "/usr/bin/env"
+    public static let gitExecutablePath = "/usr/bin/git"
+
     private let policy: PolicyEngine
 
     public init(policy: PolicyEngine = PolicyEngine()) {
@@ -43,7 +48,7 @@ public final class VerifiedExecutor: @unchecked Sendable {
         }
 
         let result = try Self.runSubprocess(
-            executable: "/bin/bash",
+            executable: Self.shellExecutablePath,
             arguments: ["-c", cmd],
             environment: Self.sanitizedEnvironment(removing: ["CLAUDE_CODE", "CLAUDECODE"])
         )

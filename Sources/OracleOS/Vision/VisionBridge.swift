@@ -332,14 +332,7 @@ public enum VisionBridge {
     /// Find the oracle-vision launcher script/binary.
     private static func findOracleVisionBinary() -> String? {
         let executableDirectory = (ProcessInfo.processInfo.arguments[0] as NSString).deletingLastPathComponent
-        let candidates: [String] = [
-            OracleProductPaths.visionInstallDirectory.appendingPathComponent("oracle-vision", isDirectory: false).path,
-            OracleProductPaths.bundledVisionBootstrapDirectory?.appendingPathComponent("oracle-vision", isDirectory: false).path,
-            "/opt/homebrew/bin/oracle-vision",
-            "/usr/local/bin/oracle-vision",
-            executableDirectory + "/oracle-vision",
-            executableDirectory + "/../Infra/Sidecars/vision-sidecar/oracle-vision",
-        ].compactMap { $0 }
+        let candidates = OracleProductPaths.oracleVisionBinaryCandidates(executableDirectory: executableDirectory)
 
         for path in candidates {
             if FileManager.default.isExecutableFile(atPath: path) {
@@ -352,16 +345,7 @@ public enum VisionBridge {
     /// Find the server.py script in expected locations.
     private static func findServerScript() -> String? {
         let executableDirectory = (ProcessInfo.processInfo.arguments[0] as NSString).deletingLastPathComponent
-        let bundledVisionDirectory = OracleProductPaths.bundledVisionBootstrapDirectory
-        let candidates: [String] = [
-            OracleProductPaths.visionInstallDirectory.appendingPathComponent("server.py", isDirectory: false).path,
-            bundledVisionDirectory?.appendingPathComponent("server.py", isDirectory: false).path,
-            "/opt/homebrew/share/oracle-os/vision-sidecar/server.py",
-            "/usr/local/share/oracle-os/vision-sidecar/server.py",
-            executableDirectory + "/Infra/Sidecars/vision-sidecar/server.py",
-            (executableDirectory as NSString).deletingLastPathComponent + "/Infra/Sidecars/vision-sidecar/server.py",
-            ((executableDirectory as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent + "/Infra/Sidecars/vision-sidecar/server.py",
-        ].compactMap { $0 }
+        let candidates = OracleProductPaths.visionServerScriptCandidates(executableDirectory: executableDirectory)
 
         for path in candidates {
             if FileManager.default.fileExists(atPath: path) {
@@ -375,21 +359,8 @@ public enum VisionBridge {
     /// Returns nil if no suitable Python is found.
     private static func findPython() -> String? {
         // Check venv first (most likely to have mlx_vlm)
-        let candidates = [
-            OracleProductPaths.visionInstallDirectory
-                .appendingPathComponent(".venv/bin/python3", isDirectory: false)
-                .path,
-            NSHomeDirectory() + "/.oracle-os/venv/bin/python3",
-        ]
-        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+        for candidate in OracleProductPaths.visionPythonCandidates where FileManager.default.isExecutableFile(atPath: candidate) {
             return candidate
-        }
-
-        // Homebrew Python
-        for path in ["/opt/homebrew/bin/python3", "/usr/local/bin/python3"] {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
         }
 
         return nil
@@ -400,12 +371,7 @@ public enum VisionBridge {
     /// Check if the ShowUI-2B model exists at any known location.
     /// Returns the path if found, nil otherwise.
     public static func findModelPath() -> String? {
-        let candidates = [
-            OracleProductPaths.visionModelDirectory.path,
-            "/opt/homebrew/share/oracle-os/models/ShowUI-2B",
-            NSHomeDirectory() + "/.oracle-os/models/ShowUI-2B",
-            NSHomeDirectory() + "/.oracle-os/models/llm/ShowUI-2B-bf16-8bit",
-        ]
+        let candidates = OracleProductPaths.visionModelCandidateDirectories
 
         for path in candidates {
             let safetensors = (path as NSString).appendingPathComponent("model.safetensors")

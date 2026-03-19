@@ -669,7 +669,7 @@ public final class RepositoryIndexer: @unchecked Sendable {
     private func currentBranch(workspaceRoot: URL) -> String? {
         do {
             let result = try VerifiedExecutor.runSubprocess(
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["git", "branch", "--show-current"],
                 currentDirectoryURL: workspaceRoot
             )
@@ -683,7 +683,7 @@ public final class RepositoryIndexer: @unchecked Sendable {
     private func gitDirty(workspaceRoot: URL) -> Bool {
         do {
             let result = try VerifiedExecutor.runSubprocess(
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: ["git", "status", "--porcelain"],
                 currentDirectoryURL: workspaceRoot
             )

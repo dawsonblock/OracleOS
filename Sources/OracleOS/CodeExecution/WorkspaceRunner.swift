@@ -196,8 +196,8 @@ public final class WorkspaceRunner: @unchecked Sendable {
 
     private func allowedExecutable(_ executable: String) -> Bool {
         let allowedExecutables = [
-            "/usr/bin/env",
-            "/usr/bin/git",
+            VerifiedExecutor.envExecutablePath,
+            VerifiedExecutor.gitExecutablePath,
         ]
         return allowedExecutables.contains(executable)
     }

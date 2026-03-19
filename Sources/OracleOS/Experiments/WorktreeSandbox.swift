@@ -64,7 +64,7 @@ public struct WorktreeSandbox: Codable, Sendable, Equatable {
 
 private func runGit(arguments: [String], workspaceRoot: URL) throws {
     let result = try VerifiedExecutor.runSubprocess(
-        executable: "/usr/bin/env",
+        executable: VerifiedExecutor.envExecutablePath,
         arguments: ["git"] + arguments,
         currentDirectoryURL: workspaceRoot
     )
@@ -78,7 +78,7 @@ private func runGit(arguments: [String], workspaceRoot: URL) throws {
 
 private func runGitOutput(arguments: [String], workspaceRoot: URL) throws -> String {
     let result = try VerifiedExecutor.runSubprocess(
-        executable: "/usr/bin/env",
+        executable: VerifiedExecutor.envExecutablePath,
         arguments: ["git"] + arguments,
         currentDirectoryURL: workspaceRoot
     )

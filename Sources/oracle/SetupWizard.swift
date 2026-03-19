@@ -192,8 +192,7 @@ struct SetupWizard {
         let binaryPath = resolveBinaryPath()
 
         // Check if claude CLI exists
-        let claudeExists = FileManager.default.isExecutableFile(atPath: "/usr/local/bin/claude")
-            || FileManager.default.isExecutableFile(atPath: "/opt/homebrew/bin/claude")
+        let claudeExists = OracleProductPaths.claudeBinaryCandidates.contains { FileManager.default.isExecutableFile(atPath: $0) }
             || runShell("which claude 2>/dev/null").exitCode == 0
 
         if !claudeExists {
@@ -348,7 +347,7 @@ struct SetupWizard {
                 print("  Vision grounding (oracle_ground) will not be available.")
                 print("  You can set it up manually later:")
                 print("    python3 -m venv ~/.oracle-os/venv")
-                print("    ~/.oracle-os/venv/bin/pip install mlx mlx-vlm transformers Pillow")
+                print("    \(OracleProductPaths.legacyVenvExecutablePath("pip")) install mlx mlx-vlm transformers Pillow")
                 print("")
                 return false
             }
@@ -399,7 +398,7 @@ struct SetupWizard {
     /// Check if system Python has mlx_vlm
     private func checkPythonWithMLX() -> Bool {
         // Check venv first
-        let venvPython = NSHomeDirectory() + "/.oracle-os/venv/bin/python3"
+        let venvPython = OracleProductPaths.legacyVenvExecutablePath("python3")
         if FileManager.default.isExecutableFile(atPath: venvPython) {
             let result = runShell("\(venvPython) -c 'import mlx_vlm' 2>/dev/null")
             if result.exitCode == 0 { return true }
@@ -416,7 +415,7 @@ struct SetupWizard {
 
         // Find system Python
         let pythonPath: String
-        let candidates = ["/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
+        let candidates = OracleProductPaths.systemPythonCandidates
         if let found = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
             pythonPath = found
         } else {
@@ -429,7 +428,7 @@ struct SetupWizard {
         }
 
         // Create venv (skip if already exists and has pip)
-        let venvPip = venvPath + "/bin/pip"
+        let venvPip = OracleProductPaths.legacyVenvExecutablePath("pip")
         if !FileManager.default.isExecutableFile(atPath: venvPip) {
             print("  Creating virtual environment...")
             let createResult = runShell("\(pythonPath) -m venv \"\(venvPath)\" 2>&1")
@@ -443,7 +442,7 @@ struct SetupWizard {
         print("  Installing mlx, mlx-vlm, transformers, Pillow...")
         print("  (This may take a minute on first install)")
         let pipResult = runShell(
-            "\"\(venvPath)/bin/pip\" install --quiet mlx mlx-vlm transformers Pillow 2>&1"
+            "\"\(OracleProductPaths.legacyVenvExecutablePath("pip"))\" install --quiet mlx mlx-vlm transformers Pillow 2>&1"
         )
         if pipResult.exitCode != 0 {
             print("  ERROR: pip install failed:")
@@ -456,7 +455,9 @@ struct SetupWizard {
         }
 
         // Verify
-        let verifyResult = runShell("\"\(venvPath)/bin/python3\" -c 'import mlx_vlm; print(\"ok\")' 2>&1")
+        let verifyResult = runShell(
+            "\"\(OracleProductPaths.legacyVenvExecutablePath("python3"))\" -c 'import mlx_vlm; print(\"ok\")' 2>&1"
+        )
         if verifyResult.exitCode != 0 || !verifyResult.output.contains("ok") {
             print("  ERROR: mlx_vlm verification failed")
             return false
@@ -478,7 +479,7 @@ struct SetupWizard {
         try? FileManager.default.createDirectory(atPath: destDir, withIntermediateDirectories: true)
 
         // Use huggingface-cli if available, otherwise use Python
-        let venvPython = NSHomeDirectory() + "/.oracle-os/venv/bin/python3"
+        let venvPython = OracleProductPaths.legacyVenvExecutablePath("python3")
         let python: String
         if FileManager.default.isExecutableFile(atPath: venvPython) {
             python = venvPython
@@ -565,12 +566,7 @@ struct SetupWizard {
 
     /// Find oracle-vision launcher
     private func findOracleVisionBinary() -> String? {
-        let candidates = [
-            "/opt/homebrew/bin/oracle-vision",
-            "/usr/local/bin/oracle-vision",
-            (ProcessInfo.processInfo.arguments[0] as NSString)
-                .deletingLastPathComponent + "/oracle-vision",
-        ]
+        let candidates = OracleProductPaths.oracleVisionBinaryCandidates(executableDirectory: (ProcessInfo.processInfo.arguments[0] as NSString).deletingLastPathComponent)
         for path in candidates {
             if FileManager.default.isExecutableFile(atPath: path) {
                 return path
@@ -694,11 +690,7 @@ struct SetupWizard {
 
     private func resolveBinaryPath() -> String {
         // Check common install locations
-        let candidates = [
-            "/opt/homebrew/bin/oracle",
-            "/usr/local/bin/oracle",
-            ProcessInfo.processInfo.arguments[0],
-        ]
+        let candidates = OracleProductPaths.systemOracleBinaryCandidates + [ProcessInfo.processInfo.arguments[0]]
         for path in candidates {
             if FileManager.default.isExecutableFile(atPath: path) {
                 return path
@@ -712,10 +704,7 @@ struct SetupWizard {
         let binaryDir = (binaryPath as NSString).deletingLastPathComponent
 
         // Homebrew: /opt/homebrew/share/oracle-os/recipes/
-        let brewPaths = [
-            "/opt/homebrew/share/oracle-os/recipes",
-            "/usr/local/share/oracle-os/recipes",
-        ]
+        let brewPaths = OracleProductPaths.homebrewRecipesDirectories
         for path in brewPaths {
             if FileManager.default.fileExists(atPath: path) {
                 return path
@@ -748,7 +737,7 @@ struct SetupWizard {
     private func runShell(_ command: String) -> ShellResult {
         do {
             let result = try VerifiedExecutor.runSubprocess(
-                executable: "/bin/zsh",
+                executable: VerifiedExecutor.loginShellExecutablePath,
                 arguments: ["-c", command],
                 environment: VerifiedExecutor.sanitizedEnvironment(removing: ["CLAUDE_CODE", "CLAUDECODE"])
             )
