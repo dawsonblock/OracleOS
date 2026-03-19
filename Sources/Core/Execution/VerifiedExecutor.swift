@@ -63,6 +63,9 @@ public final class VerifiedExecutor: Sendable {
 
     private func runShell(_ command: Command) throws -> [any DomainEvent] {
         let shellCommand = command.stringValue(for: "cmd") ?? ""
+        if policy.policy.useMicroVM {
+            return try runShellMicroVM(commandID: command.id, shellCommand: shellCommand)
+        }
         if policy.policy.useContainers {
             return try runShellContainer(commandID: command.id, shellCommand: shellCommand)
         }
@@ -118,9 +121,22 @@ public final class VerifiedExecutor: Sendable {
             "--read-only",
             "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
             "--cap-drop=ALL",
+        ]
+
+        if let seccompProfilePath = policy.policy.seccompProfilePath {
+            let normalizedPath = URL(fileURLWithPath: seccompProfilePath).standardizedFileURL.path
+            guard FileManager.default.fileExists(atPath: normalizedPath) else {
+                throw RuntimeError.serverFailure("Seccomp profile missing: \(normalizedPath)")
+            }
+            process.arguments?.append(contentsOf: [
+                "--security-opt", "seccomp=\(normalizedPath)",
+            ])
+        }
+
+        process.arguments?.append(contentsOf: [
             policy.policy.containerImage,
             shellCommand,
-        ]
+        ])
 
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -137,6 +153,83 @@ public final class VerifiedExecutor: Sendable {
                 cleanupContainerIfNeeded(cidFileURL: cidFileURL)
             }
         )
+
+        let output = trimmedOutput(from: pipe)
+
+        return [
+            ShellExecutedEvent(
+                commandID: commandID,
+                command: shellCommand,
+                output: output,
+                status: process.terminationStatus
+            ),
+        ]
+    }
+
+    private func runShellMicroVM(commandID: UUID, shellCommand: String) throws -> [any DomainEvent] {
+        let firecrackerBinaryPath = URL(fileURLWithPath: policy.policy.firecrackerBinaryPath).standardizedFileURL.path
+        guard FileManager.default.isExecutableFile(atPath: firecrackerBinaryPath) else {
+            throw RuntimeError.serverFailure("MicroVM runtime unavailable: \(firecrackerBinaryPath)")
+        }
+
+        let kernelPath = URL(fileURLWithPath: policy.policy.microVMKernelPath).standardizedFileURL.path
+        let rootfsPath = URL(fileURLWithPath: policy.policy.microVMRootfsPath).standardizedFileURL.path
+
+        guard FileManager.default.fileExists(atPath: kernelPath) else {
+            throw RuntimeError.serverFailure("MicroVM kernel missing: \(kernelPath)")
+        }
+        guard FileManager.default.fileExists(atPath: rootfsPath) else {
+            throw RuntimeError.serverFailure("MicroVM rootfs missing: \(rootfsPath)")
+        }
+
+        let workspaceImagePath = policy.policy.microVMWorkspaceImagePath.map {
+            URL(fileURLWithPath: $0).standardizedFileURL.path
+        }
+        if let workspaceImagePath,
+           !FileManager.default.fileExists(atPath: workspaceImagePath) {
+            throw RuntimeError.serverFailure("MicroVM workspace image missing: \(workspaceImagePath)")
+        }
+
+        let workingDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("oracle-microvm-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: workingDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        defer {
+            try? FileManager.default.removeItem(at: workingDirectory)
+        }
+
+        let socketPath = workingDirectory.appendingPathComponent("firecracker.sock").path
+        let configURL = workingDirectory.appendingPathComponent("firecracker-config.json")
+        let runner = MicroVMRunner(
+            configuration: MicroVMConfiguration(
+                firecrackerBinaryPath: firecrackerBinaryPath,
+                kernelImagePath: kernelPath,
+                rootfsPath: rootfsPath,
+                workspaceImagePath: workspaceImagePath,
+                vcpuCount: policy.policy.microVMCPUCount,
+                memoryMiB: policy.policy.microVMMemoryMiB
+            )
+        )
+        let plan = try runner.invocationPlan(
+            command: shellCommand,
+            apiSocketPath: socketPath,
+            configFilePath: configURL.path
+        )
+        try Self.writeText(plan.configJSON, to: configURL)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: plan.executablePath)
+        process.arguments = plan.arguments
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        try process.run()
+        try waitForShellExit(process, cleanupOnTimeout: nil)
 
         let output = trimmedOutput(from: pipe)
 

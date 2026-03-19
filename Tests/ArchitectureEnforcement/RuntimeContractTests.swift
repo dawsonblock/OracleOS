@@ -76,6 +76,32 @@ final class RuntimeContractTests: XCTestCase {
         }
     }
 
+    func test_microvm_runner_builds_firecracker_config_with_encoded_command() throws {
+        let runner = MicroVMRunner(
+            configuration: MicroVMConfiguration(
+                firecrackerBinaryPath: "/usr/local/bin/firecracker",
+                kernelImagePath: "/tmp/vmlinux",
+                rootfsPath: "/tmp/rootfs.ext4",
+                workspaceImagePath: "/tmp/workspace.ext4",
+                vcpuCount: 2,
+                memoryMiB: 256
+            )
+        )
+
+        let plan = try runner.invocationPlan(
+            command: "echo hello",
+            apiSocketPath: "/tmp/firecracker.sock",
+            configFilePath: "/tmp/firecracker.json"
+        )
+
+        XCTAssertEqual(plan.executablePath, "/usr/local/bin/firecracker")
+        XCTAssertEqual(plan.arguments, ["--api-sock", "/tmp/firecracker.sock", "--config-file", "/tmp/firecracker.json"])
+        XCTAssertTrue(plan.configJSON.contains("\"kernel_image_path\" : \"/tmp/vmlinux\""))
+        XCTAssertTrue(plan.configJSON.contains("\"path_on_host\" : \"/tmp/rootfs.ext4\""))
+        XCTAssertTrue(plan.configJSON.contains("\"path_on_host\" : \"/tmp/workspace.ext4\""))
+        XCTAssertTrue(plan.configJSON.contains("oracle_cmd_b64="))
+    }
+
     func test_runtime_runs_write_goal_through_single_path() async throws {
         let runtime = AgentRuntime(
             loop: AgentLoop(
