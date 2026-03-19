@@ -4,4 +4,4 @@ Sidecars are isolated infrastructure components.
 
 Rules:
 - no direct runtime calls
-- only API interaction is allowed
+- only API interactions are allowed
