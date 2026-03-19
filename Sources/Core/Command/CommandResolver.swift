@@ -11,6 +11,7 @@ public final class CommandResolver: Sendable {
             switch normalizedType {
             case "shell":
                 payload["cmd"] = payload["cmd"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+                payload["timeout_ms"] = normalizedTimeoutMillis(payload["timeout_ms"])
             case "file.write":
                 let path = payload["path"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 if path.isEmpty {
@@ -25,11 +26,23 @@ public final class CommandResolver: Sendable {
             case "http.request":
                 payload["url"] = payload["url"]?.trimmingCharacters(in: .whitespacesAndNewlines)
                 payload["method"] = (payload["method"] ?? "GET").uppercased()
+                payload["timeout_ms"] = normalizedTimeoutMillis(payload["timeout_ms"])
             default:
                 break
             }
 
             return Command(id: command.id, type: normalizedType, payload: payload)
         }
+    }
+
+    private func normalizedTimeoutMillis(_ rawValue: String?) -> String {
+        guard let rawValue,
+              let parsed = Int(rawValue.trimmingCharacters(in: .whitespacesAndNewlines)),
+              parsed > 0
+        else {
+            return String(ExecutionPolicyLimits.defaultTimeoutMillis)
+        }
+
+        return String(min(parsed, ExecutionPolicyLimits.maximumTimeoutMillis))
     }
 }

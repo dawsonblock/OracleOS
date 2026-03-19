@@ -14,6 +14,7 @@ public struct ShellExecutedEvent: DomainEvent, Equatable {
     public let command: String
     public let output: String
     public let status: Int32
+    public let durationMillis: Int
 
     public var type: String { Self.eventType }
 
@@ -22,13 +23,15 @@ public struct ShellExecutedEvent: DomainEvent, Equatable {
         commandID: UUID,
         command: String,
         output: String,
-        status: Int32
+        status: Int32,
+        durationMillis: Int
     ) {
         self.id = id
         self.commandID = commandID
         self.command = command
         self.output = output
         self.status = status
+        self.durationMillis = durationMillis
     }
 }
 
@@ -83,6 +86,7 @@ public struct HTTPResponseEvent: DomainEvent, Equatable {
     public let url: String
     public let size: Int
     public let status: Int
+    public let durationMillis: Int
 
     public var type: String { Self.eventType }
 
@@ -91,12 +95,14 @@ public struct HTTPResponseEvent: DomainEvent, Equatable {
         commandID: UUID,
         url: String,
         size: Int,
-        status: Int
+        status: Int,
+        durationMillis: Int
     ) {
         self.id = id
         self.commandID = commandID
         self.url = url
         self.size = size
         self.status = status
+        self.durationMillis = durationMillis
     }
 }

@@ -5,6 +5,7 @@ public enum RuntimeError: Error, LocalizedError, Sendable {
     case unknownCommand(String)
     case unknownEvent(String)
     case policyViolation(String)
+    case executionTimedOut(String, Int)
     case serverFailure(String)
 
     public var errorDescription: String? {
@@ -17,6 +18,8 @@ public enum RuntimeError: Error, LocalizedError, Sendable {
             return "Unknown event type: \(type)"
         case let .policyViolation(reason):
             return reason
+        case let .executionTimedOut(commandType, milliseconds):
+            return "\(commandType) execution timed out after \(milliseconds)ms"
         case let .serverFailure(reason):
             return reason
         }

@@ -79,21 +79,13 @@ public final class VerifiedExecutor: Sendable {
         )
     }
 
-    private static func resolvedURL(for path: String) -> URL {
-        let rawURL = URL(fileURLWithPath: path)
-        if rawURL.path.hasPrefix("/") {
-            return rawURL
-        }
-
-        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        return cwd.appendingPathComponent(path, isDirectory: false)
-    }
-
     private func runShell(_ command: Command) throws -> [any DomainEvent] {
         let task = Process()
         let stdout = Pipe()
         let stderr = Pipe()
         let shellCommand = command.payload["cmd"] ?? ""
+        let timeoutMillis = try policy.validatedTimeoutMillis(command.payload["timeout_ms"])
+        let startedAt = Date()
 
         task.executableURL = URL(fileURLWithPath: "/bin/bash")
         task.arguments = ["-c", shellCommand]
@@ -101,10 +93,11 @@ public final class VerifiedExecutor: Sendable {
         task.standardError = stderr
 
         try task.run()
-        task.waitUntilExit()
+        try waitForExit(task, timeoutMillis: timeoutMillis, commandType: command.type)
 
         let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let durationMillis = max(1, Int(Date().timeIntervalSince(startedAt) * 1000.0))
 
         return [
             ShellExecutedEvent(
@@ -115,7 +108,8 @@ public final class VerifiedExecutor: Sendable {
                     stdout: stdoutText,
                     stderr: stderrText
                 ).combinedOutput,
-                status: task.terminationStatus
+                status: task.terminationStatus,
+                durationMillis: durationMillis
             ),
         ]
     }
@@ -123,7 +117,7 @@ public final class VerifiedExecutor: Sendable {
     private func writeFile(_ command: Command) throws -> [any DomainEvent] {
         let path = command.payload["path"] ?? ""
         let content = command.payload["content"] ?? ""
-        let url = Self.resolvedURL(for: path)
+        let url = try RuntimePathPolicy.validatedURL(for: path)
 
         try Self.writeText(content, to: url)
 
@@ -138,7 +132,7 @@ public final class VerifiedExecutor: Sendable {
 
     private func deleteFile(_ command: Command) throws -> [any DomainEvent] {
         let path = command.payload["path"] ?? ""
-        let url = Self.resolvedURL(for: path)
+        let url = try RuntimePathPolicy.validatedURL(for: path)
 
         try Self.deleteItem(at: url)
 
@@ -155,9 +149,12 @@ public final class VerifiedExecutor: Sendable {
         guard let url = URL(string: urlString) else {
             throw RuntimeError.invalidPayload
         }
+        let timeoutMillis = try policy.validatedTimeoutMillis(command.payload["timeout_ms"])
+        let startedAt = Date()
 
         var request = URLRequest(url: url)
         request.httpMethod = command.payload["method"] ?? "GET"
+        request.timeoutInterval = TimeInterval(timeoutMillis) / 1000.0
         if let body = command.payload["body"] {
             request.httpBody = Data(body.utf8)
         }
@@ -173,7 +170,12 @@ public final class VerifiedExecutor: Sendable {
         }
 
         task.resume()
-        semaphore.wait()
+        let waitResult = semaphore.wait(timeout: .now() + .milliseconds(timeoutMillis))
+        if waitResult == .timedOut {
+            task.cancel()
+            session.finishTasksAndInvalidate()
+            throw RuntimeError.executionTimedOut(command.type, timeoutMillis)
+        }
         session.finishTasksAndInvalidate()
 
         if let error = box.error {
@@ -182,15 +184,30 @@ public final class VerifiedExecutor: Sendable {
 
         let size = box.data?.count ?? 0
         let status = box.response?.statusCode ?? 0
+        let durationMillis = max(1, Int(Date().timeIntervalSince(startedAt) * 1000.0))
 
         return [
             HTTPResponseEvent(
                 commandID: command.id,
                 url: urlString,
                 size: size,
-                status: status
+                status: status,
+                durationMillis: durationMillis
             ),
         ]
+    }
+
+    private func waitForExit(_ task: Process, timeoutMillis: Int, commandType: String) throws {
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutMillis) / 1000.0)
+        while task.isRunning {
+            if Date() >= deadline {
+                task.terminate()
+                task.waitUntilExit()
+                throw RuntimeError.executionTimedOut(commandType, timeoutMillis)
+            }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        task.waitUntilExit()
     }
 }
 
