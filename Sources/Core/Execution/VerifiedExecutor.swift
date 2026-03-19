@@ -3,35 +3,17 @@ import Foundation
 import FoundationNetworking
 #endif
 
-public struct VerifiedProcessResult: Sendable, Equatable {
-    public let exitCode: Int32
-    public let stdout: String
-    public let stderr: String
-
-    public var combinedOutput: String {
-        [stdout, stderr]
-            .filter { !$0.isEmpty }
-            .joined(separator: stdout.isEmpty || stderr.isEmpty ? "" : "\n")
-    }
-
-    public init(exitCode: Int32, stdout: String, stderr: String) {
-        self.exitCode = exitCode
-        self.stdout = stdout
-        self.stderr = stderr
-    }
-}
-
 public final class VerifiedExecutor: Sendable {
     private let policy: PolicyEngine
 
-    public init(policy: PolicyEngine = PolicyEngine()) {
+    public init(policy: PolicyEngine) {
         self.policy = policy
     }
 
     public func execute(_ command: Command) throws -> [any DomainEvent] {
         try policy.validate(command)
 
-        switch command.type {
+        switch command.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "shell":
             return try runShell(command)
         case "file.write":
@@ -39,9 +21,9 @@ public final class VerifiedExecutor: Sendable {
         case "file.delete":
             return try deleteFile(command)
         case "http.request":
-            return try httpRequest(command)
+            return try performRequest(command)
         default:
-            throw RuntimeError.unknownCommand(command.type)
+            throw RuntimeError.unknownCommand
         }
     }
 
@@ -80,49 +62,202 @@ public final class VerifiedExecutor: Sendable {
     }
 
     private func runShell(_ command: Command) throws -> [any DomainEvent] {
-        let task = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        let shellCommand = command.payload["cmd"] ?? ""
-        let timeoutMillis = try policy.validatedTimeoutMillis(command.payload["timeout_ms"])
-        let startedAt = Date()
+        let shellCommand = command.stringValue(for: "cmd") ?? ""
+        let selection = selectShellBackend()
+        let result: ShellExecutedEvent
 
-        task.executableURL = URL(fileURLWithPath: "/bin/bash")
-        task.arguments = ["-c", shellCommand]
-        task.standardOutput = stdout
-        task.standardError = stderr
-
-        try task.run()
-        try waitForExit(task, timeoutMillis: timeoutMillis, commandType: command.type)
-
-        let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let durationMillis = max(1, Int(Date().timeIntervalSince(startedAt) * 1000.0))
+        switch selection.backend {
+        case .microVM:
+            result = try runShellMicroVM(commandID: command.id, shellCommand: shellCommand)
+        case .container:
+            result = try runShellContainer(commandID: command.id, shellCommand: shellCommand)
+        case .host:
+            result = try runShellHost(commandID: command.id, shellCommand: shellCommand)
+        }
 
         return [
-            ShellExecutedEvent(
+            ExecutionBackendSelectedEvent(
                 commandID: command.id,
-                command: shellCommand,
-                output: VerifiedProcessResult(
-                    exitCode: task.terminationStatus,
-                    stdout: stdoutText,
-                    stderr: stderrText
-                ).combinedOutput,
-                status: task.terminationStatus,
-                durationMillis: durationMillis
+                backend: selection.backend.rawValue,
+                detail: selection.detail
             ),
+            result,
         ]
     }
 
+    private func runShellHost(commandID: UUID, shellCommand: String) throws -> ShellExecutedEvent {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", shellCommand]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        try process.run()
+        try waitForShellExit(process, cleanupOnTimeout: nil)
+
+        let output = trimmedOutput(from: pipe)
+
+        return ShellExecutedEvent(
+            commandID: commandID,
+            command: shellCommand,
+            output: output,
+            status: process.terminationStatus
+        )
+    }
+
+    private func runShellContainer(commandID: UUID, shellCommand: String) throws -> ShellExecutedEvent {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") else {
+            throw RuntimeError.serverFailure("Container runtime unavailable: /usr/bin/docker")
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/docker")
+
+        let cidFileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("oracle-executor-\(UUID().uuidString).cid")
+        let workspaceRoot = workspaceRootPath()
+        process.arguments = [
+            "run",
+            "--rm",
+            "--cidfile", cidFileURL.path,
+            "--network", "none",
+            "--memory", "128m",
+            "--cpus", "0.5",
+            "--pids-limit", "64",
+            "-v", "\(workspaceRoot):/workspace",
+            "--workdir", "/workspace",
+            "--read-only",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
+            "--cap-drop=ALL",
+        ]
+
+        if let seccompProfilePath = policy.policy.seccompProfilePath {
+            let normalizedPath = URL(fileURLWithPath: seccompProfilePath).standardizedFileURL.path
+            guard FileManager.default.fileExists(atPath: normalizedPath) else {
+                throw RuntimeError.serverFailure("Seccomp profile missing: \(normalizedPath)")
+            }
+            process.arguments?.append(contentsOf: [
+                "--security-opt", "seccomp=\(normalizedPath)",
+            ])
+        }
+
+        process.arguments?.append(contentsOf: [
+            policy.policy.containerImage,
+            shellCommand,
+        ])
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        try process.run()
+        defer {
+            try? FileManager.default.removeItem(at: cidFileURL)
+        }
+
+        try waitForShellExit(
+            process,
+            cleanupOnTimeout: { [cidFileURL] in
+                cleanupContainerIfNeeded(cidFileURL: cidFileURL)
+            }
+        )
+
+        let output = trimmedOutput(from: pipe)
+
+        return ShellExecutedEvent(
+            commandID: commandID,
+            command: shellCommand,
+            output: output,
+            status: process.terminationStatus
+        )
+    }
+
+    private func runShellMicroVM(commandID: UUID, shellCommand: String) throws -> ShellExecutedEvent {
+        let firecrackerBinaryPath = URL(fileURLWithPath: policy.policy.firecrackerBinaryPath).standardizedFileURL.path
+        guard FileManager.default.isExecutableFile(atPath: firecrackerBinaryPath) else {
+            throw RuntimeError.serverFailure("MicroVM runtime unavailable: \(firecrackerBinaryPath)")
+        }
+
+        let kernelPath = URL(fileURLWithPath: policy.policy.microVMKernelPath).standardizedFileURL.path
+        let rootfsPath = URL(fileURLWithPath: policy.policy.microVMRootfsPath).standardizedFileURL.path
+
+        guard FileManager.default.fileExists(atPath: kernelPath) else {
+            throw RuntimeError.serverFailure("MicroVM kernel missing: \(kernelPath)")
+        }
+        guard FileManager.default.fileExists(atPath: rootfsPath) else {
+            throw RuntimeError.serverFailure("MicroVM rootfs missing: \(rootfsPath)")
+        }
+
+        let workspaceImagePath = policy.policy.microVMWorkspaceImagePath.map {
+            URL(fileURLWithPath: $0).standardizedFileURL.path
+        }
+        if let workspaceImagePath,
+           !FileManager.default.fileExists(atPath: workspaceImagePath) {
+            throw RuntimeError.serverFailure("MicroVM workspace image missing: \(workspaceImagePath)")
+        }
+
+        let workingDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("oracle-microvm-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: workingDirectory,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+        defer {
+            try? FileManager.default.removeItem(at: workingDirectory)
+        }
+
+        let socketPath = workingDirectory.appendingPathComponent("firecracker.sock").path
+        let configURL = workingDirectory.appendingPathComponent("firecracker-config.json")
+        let runner = MicroVMRunner(
+            configuration: MicroVMConfiguration(
+                firecrackerBinaryPath: firecrackerBinaryPath,
+                kernelImagePath: kernelPath,
+                rootfsPath: rootfsPath,
+                workspaceImagePath: workspaceImagePath,
+                vcpuCount: policy.policy.microVMCPUCount,
+                memoryMiB: policy.policy.microVMMemoryMiB
+            )
+        )
+        let plan = try runner.invocationPlan(
+            command: shellCommand,
+            apiSocketPath: socketPath,
+            configFilePath: configURL.path
+        )
+        try Self.writeText(plan.configJSON, to: configURL)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: plan.executablePath)
+        process.arguments = plan.arguments
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        try process.run()
+        try waitForShellExit(process, cleanupOnTimeout: nil)
+
+        let output = trimmedOutput(from: pipe)
+
+        return ShellExecutedEvent(
+            commandID: commandID,
+            command: shellCommand,
+            output: output,
+            status: process.terminationStatus
+        )
+    }
+
     private func writeFile(_ command: Command) throws -> [any DomainEvent] {
-        let path = command.payload["path"] ?? ""
-        let content = command.payload["content"] ?? ""
-        let url = try RuntimePathPolicy.validatedURL(for: path)
+        let path = command.stringValue(for: "path") ?? ""
+        let content = command.stringValue(for: "content") ?? ""
+        let url = resolveURL(for: path)
 
         try Self.writeText(content, to: url)
 
         return [
-            FileWriteRequestedEvent(
+            FileWriteEvent(
                 commandID: command.id,
                 path: path,
                 content: content
@@ -131,88 +266,248 @@ public final class VerifiedExecutor: Sendable {
     }
 
     private func deleteFile(_ command: Command) throws -> [any DomainEvent] {
-        let path = command.payload["path"] ?? ""
-        let url = try RuntimePathPolicy.validatedURL(for: path)
+        let path = command.stringValue(for: "path") ?? ""
+        let url = resolveURL(for: path)
 
         try Self.deleteItem(at: url)
 
         return [
-            FileDeleteRequestedEvent(
+            FileDeleteEvent(
                 commandID: command.id,
                 path: path
             ),
         ]
     }
 
-    private func httpRequest(_ command: Command) throws -> [any DomainEvent] {
-        let urlString = command.payload["url"] ?? ""
+    private func performRequest(_ command: Command) throws -> [any DomainEvent] {
+        let urlString = command.stringValue(for: "url") ?? ""
         guard let url = URL(string: urlString) else {
-            throw RuntimeError.invalidPayload
-        }
-        let timeoutMillis = try policy.validatedTimeoutMillis(command.payload["timeout_ms"])
-        let startedAt = Date()
-
-        var request = URLRequest(url: url)
-        request.httpMethod = command.payload["method"] ?? "GET"
-        request.timeoutInterval = TimeInterval(timeoutMillis) / 1000.0
-        if let body = command.payload["body"] {
-            request.httpBody = Data(body.utf8)
+            throw RuntimeError.invalidURL
         }
 
         let box = ResponseBox()
         let semaphore = DispatchSemaphore(value: 0)
-        let session = URLSession(configuration: .default)
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = URLSession.shared.dataTask(with: url) { data, _, error in
             box.data = data
-            box.response = response as? HTTPURLResponse
             box.error = error
             semaphore.signal()
         }
 
         task.resume()
-        let waitResult = semaphore.wait(timeout: .now() + .milliseconds(timeoutMillis))
-        if waitResult == .timedOut {
+        let timeout = DispatchTime.now() + .milliseconds(Int(policy.policy.maxExecutionTime * 1000))
+        if semaphore.wait(timeout: timeout) == .timedOut {
             task.cancel()
-            session.finishTasksAndInvalidate()
-            throw RuntimeError.executionTimedOut(command.type, timeoutMillis)
+            throw RuntimeError.timeout
         }
-        session.finishTasksAndInvalidate()
 
         if let error = box.error {
             throw error
         }
 
-        let size = box.data?.count ?? 0
-        let status = box.response?.statusCode ?? 0
-        let durationMillis = max(1, Int(Date().timeIntervalSince(startedAt) * 1000.0))
+        let trimmed = box.data?.prefix(policy.policy.maxOutputBytes) ?? Data()
+        let output = String(data: trimmed, encoding: .utf8) ?? ""
 
         return [
             HTTPResponseEvent(
                 commandID: command.id,
                 url: urlString,
-                size: size,
-                status: status,
-                durationMillis: durationMillis
+                body: output
             ),
         ]
     }
 
-    private func waitForExit(_ task: Process, timeoutMillis: Int, commandType: String) throws {
-        let deadline = Date().addingTimeInterval(TimeInterval(timeoutMillis) / 1000.0)
-        while task.isRunning {
-            if Date() >= deadline {
-                task.terminate()
-                task.waitUntilExit()
-                throw RuntimeError.executionTimedOut(commandType, timeoutMillis)
-            }
+    private func resolveURL(for path: String) -> URL {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("/") {
+            return URL(fileURLWithPath: trimmed, isDirectory: false).standardizedFileURL
+        }
+
+        return URL(fileURLWithPath: trimmed, relativeTo: URL(fileURLWithPath: ".", isDirectory: true))
+            .standardizedFileURL
+    }
+
+    private func waitForShellExit(
+        _ process: Process,
+        cleanupOnTimeout: (() -> Void)?
+    ) throws {
+        let deadline = Date().addingTimeInterval(policy.policy.maxExecutionTime)
+        while process.isRunning && Date() < deadline {
             Thread.sleep(forTimeInterval: 0.01)
         }
-        task.waitUntilExit()
+
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+            cleanupOnTimeout?()
+            throw RuntimeError.timeout
+        }
+
+        process.waitUntilExit()
+    }
+
+    private func trimmedOutput(from pipe: Pipe) -> String {
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let trimmed = data.prefix(policy.policy.maxOutputBytes)
+        return String(data: trimmed, encoding: .utf8) ?? ""
+    }
+
+    private func workspaceRootPath() -> String {
+        if let root = policy.policy.allowedWriteRoots.first {
+            return URL(fileURLWithPath: root, isDirectory: true).standardizedFileURL.path
+        }
+
+        return URL(fileURLWithPath: "workspace", relativeTo: URL(fileURLWithPath: ".", isDirectory: true))
+            .standardizedFileURL
+            .path
+    }
+
+    private func cleanupContainerIfNeeded(cidFileURL: URL) {
+        let containerID = (try? String(contentsOf: cidFileURL, encoding: .utf8))
+            ?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let containerID, !containerID.isEmpty else {
+            return
+        }
+
+        let killProcess = Process()
+        killProcess.executableURL = URL(fileURLWithPath: "/usr/bin/docker")
+        killProcess.arguments = ["kill", containerID]
+        killProcess.standardOutput = Pipe()
+        killProcess.standardError = Pipe()
+        try? killProcess.run()
+        killProcess.waitUntilExit()
+    }
+
+    private var containerRuntimeAvailable: Bool {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") else {
+            return false
+        }
+
+        if let seccompProfilePath = policy.policy.seccompProfilePath {
+            let normalizedPath = URL(fileURLWithPath: seccompProfilePath).standardizedFileURL.path
+            return FileManager.default.fileExists(atPath: normalizedPath)
+        }
+
+        return true
+    }
+
+    private var microVMAssetsAvailable: Bool {
+        let firecrackerBinaryPath = URL(fileURLWithPath: policy.policy.firecrackerBinaryPath).standardizedFileURL.path
+        guard FileManager.default.isExecutableFile(atPath: firecrackerBinaryPath) else {
+            return false
+        }
+
+        let kernelPath = URL(fileURLWithPath: policy.policy.microVMKernelPath).standardizedFileURL.path
+        let rootfsPath = URL(fileURLWithPath: policy.policy.microVMRootfsPath).standardizedFileURL.path
+        guard FileManager.default.fileExists(atPath: kernelPath),
+              FileManager.default.fileExists(atPath: rootfsPath) else {
+            return false
+        }
+
+        if let workspaceImagePath = policy.policy.microVMWorkspaceImagePath {
+            let normalizedPath = URL(fileURLWithPath: workspaceImagePath).standardizedFileURL.path
+            return FileManager.default.fileExists(atPath: normalizedPath)
+        }
+
+        return true
+    }
+
+    private func selectShellBackend() -> ShellBackendSelection {
+        if policy.policy.useMicroVM {
+            if microVMAssetsAvailable {
+                return ShellBackendSelection(
+                    backend: .microVM,
+                    detail: "microvm preferred and available"
+                )
+            }
+
+            if policy.policy.useContainers, containerRuntimeAvailable {
+                return ShellBackendSelection(
+                    backend: .container,
+                    detail: "microvm unavailable (\(microVMUnavailableReason)); fell back to container"
+                )
+            }
+
+            return ShellBackendSelection(
+                backend: .host,
+                detail: "microvm unavailable (\(microVMUnavailableReason)); fell back to host"
+            )
+        }
+
+        if policy.policy.useContainers {
+            if containerRuntimeAvailable {
+                return ShellBackendSelection(
+                    backend: .container,
+                    detail: "container backend selected"
+                )
+            }
+
+            return ShellBackendSelection(
+                backend: .host,
+                detail: "container unavailable (\(containerUnavailableReason)); fell back to host"
+            )
+        }
+
+        return ShellBackendSelection(
+            backend: .host,
+            detail: "host backend selected"
+        )
+    }
+
+    private var containerUnavailableReason: String {
+        if !FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") {
+            return "docker runtime missing"
+        }
+
+        if let seccompProfilePath = policy.policy.seccompProfilePath {
+            let normalizedPath = URL(fileURLWithPath: seccompProfilePath).standardizedFileURL.path
+            if !FileManager.default.fileExists(atPath: normalizedPath) {
+                return "seccomp profile missing at \(normalizedPath)"
+            }
+        }
+
+        return "container backend unavailable"
+    }
+
+    private var microVMUnavailableReason: String {
+        let firecrackerBinaryPath = URL(fileURLWithPath: policy.policy.firecrackerBinaryPath).standardizedFileURL.path
+        if !FileManager.default.isExecutableFile(atPath: firecrackerBinaryPath) {
+            return "firecracker binary missing at \(firecrackerBinaryPath)"
+        }
+
+        let kernelPath = URL(fileURLWithPath: policy.policy.microVMKernelPath).standardizedFileURL.path
+        if !FileManager.default.fileExists(atPath: kernelPath) {
+            return "kernel missing at \(kernelPath)"
+        }
+
+        let rootfsPath = URL(fileURLWithPath: policy.policy.microVMRootfsPath).standardizedFileURL.path
+        if !FileManager.default.fileExists(atPath: rootfsPath) {
+            return "rootfs missing at \(rootfsPath)"
+        }
+
+        if let workspaceImagePath = policy.policy.microVMWorkspaceImagePath {
+            let normalizedPath = URL(fileURLWithPath: workspaceImagePath).standardizedFileURL.path
+            if !FileManager.default.fileExists(atPath: normalizedPath) {
+                return "workspace image missing at \(normalizedPath)"
+            }
+        }
+
+        return "microvm backend unavailable"
     }
 }
 
 private final class ResponseBox: @unchecked Sendable {
     var data: Data?
-    var response: HTTPURLResponse?
     var error: Error?
+}
+
+private struct ShellBackendSelection {
+    let backend: ShellBackend
+    let detail: String
+}
+
+private enum ShellBackend: String {
+    case microVM = "microvm"
+    case container
+    case host
 }

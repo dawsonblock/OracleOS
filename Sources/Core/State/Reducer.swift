@@ -12,27 +12,23 @@ public struct DefaultReducer: Reducer {
 
         for event in events {
             switch event {
-            case let event as FileWriteRequestedEvent:
+            case let event as ExecutionBackendSelectedEvent:
+                newState.lastExecutionBackend = event.backend
+                newState.lastExecutionBackendDetail = event.detail
+                newState.executionTrace.append(event.type)
+            case let event as FileWriteEvent:
                 newState.files[event.path] = event.content
-                newState.executionTrace.append("\(event.type)#\(event.commandID.uuidString)")
-            case let event as FileDeleteRequestedEvent:
+                newState.executionTrace.append(event.type)
+            case let event as FileDeleteEvent:
                 newState.files.removeValue(forKey: event.path)
-                newState.executionTrace.append("\(event.type)#\(event.commandID.uuidString)")
+                newState.executionTrace.append(event.type)
             case let event as ShellExecutedEvent:
                 newState.lastOutput = event.output
-                newState.executionTrace.append("\(event.type)#\(event.commandID.uuidString)")
+                newState.executionTrace.append(event.type)
             case let event as HTTPResponseEvent:
-                newState.lastHTTPResponseSize = event.size
-                newState.lastHTTPResponseStatus = event.status
                 newState.lastHTTPResponseURL = event.url
-                newState.lastHTTPResponseDurationMillis = event.durationMillis
-                newState.executionTrace.append("\(event.type)#\(event.commandID.uuidString)")
-            case let event as CommandFailedEvent:
-                newState.failureCount += 1
-                newState.lastFailure = event.reason
-                newState.lastFailedCommandType = event.commandType
-                newState.lastFailureTimedOut = event.timedOut
-                newState.executionTrace.append("\(event.type)#\(event.commandID.uuidString)")
+                newState.lastHTTPResponseSize = event.body.utf8.count
+                newState.executionTrace.append(event.type)
             default:
                 continue
             }

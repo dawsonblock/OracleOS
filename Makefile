@@ -1,7 +1,7 @@
 # Oracle-OS Makefile
 # ──────────────────────────────────────────────
 
-.PHONY: build run clean test sidecars index reset help
+.PHONY: build run clean test sidecars index reset help microvm-rootfs microvm-check
 
 SWIFT := swift
 BUILD_DIR := .build
@@ -31,5 +31,13 @@ index: ## Index current directory into code index
 
 reset: ## Reset all memory stores (DESTRUCTIVE)
 	./scripts/reset_memory.sh
+
+microvm-rootfs: ## Build the Firecracker rootfs scaffold image
+	./Infra/microvm/build-rootfs.sh
+
+microvm-check: ## Check for required Firecracker assets
+	@test -f ./Infra/microvm/vmlinux || (echo "missing ./Infra/microvm/vmlinux" && exit 1)
+	@test -f ./Infra/microvm/rootfs.ext4 || (echo "missing ./Infra/microvm/rootfs.ext4" && exit 1)
+	@echo "microvm assets present"
 
 all: build sidecars ## Build and start everything

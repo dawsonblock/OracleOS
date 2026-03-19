@@ -12,7 +12,7 @@ public struct RepairEngine: Sendable {
             Command(
                 type: "file.write",
                 payload: [
-                    "path": "repair.log",
+                    "path": "workspace/repair.log",
                     "content": evaluation.issues.joined(separator: "\n"),
                 ]
             ),

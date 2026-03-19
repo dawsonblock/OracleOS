@@ -5,15 +5,15 @@ public enum DomainEventCodec {
         let encoder = JSONEncoder()
 
         switch event {
+        case let event as ExecutionBackendSelectedEvent:
+            return try encoder.encode(event)
         case let event as ShellExecutedEvent:
             return try encoder.encode(event)
-        case let event as FileWriteRequestedEvent:
+        case let event as FileWriteEvent:
             return try encoder.encode(event)
-        case let event as FileDeleteRequestedEvent:
+        case let event as FileDeleteEvent:
             return try encoder.encode(event)
         case let event as HTTPResponseEvent:
-            return try encoder.encode(event)
-        case let event as CommandFailedEvent:
             return try encoder.encode(event)
         default:
             throw RuntimeError.unknownEvent(String(describing: type(of: event)))
@@ -24,16 +24,16 @@ public enum DomainEventCodec {
         let decoder = JSONDecoder()
 
         switch type {
+        case ExecutionBackendSelectedEvent.eventType:
+            return try decoder.decode(ExecutionBackendSelectedEvent.self, from: data)
         case ShellExecutedEvent.eventType:
             return try decoder.decode(ShellExecutedEvent.self, from: data)
-        case FileWriteRequestedEvent.eventType:
-            return try decoder.decode(FileWriteRequestedEvent.self, from: data)
-        case FileDeleteRequestedEvent.eventType:
-            return try decoder.decode(FileDeleteRequestedEvent.self, from: data)
+        case FileWriteEvent.eventType:
+            return try decoder.decode(FileWriteEvent.self, from: data)
+        case FileDeleteEvent.eventType:
+            return try decoder.decode(FileDeleteEvent.self, from: data)
         case HTTPResponseEvent.eventType:
             return try decoder.decode(HTTPResponseEvent.self, from: data)
-        case CommandFailedEvent.eventType:
-            return try decoder.decode(CommandFailedEvent.self, from: data)
         default:
             throw RuntimeError.unknownEvent(type)
         }

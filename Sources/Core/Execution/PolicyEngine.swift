@@ -1,54 +1,76 @@
 import Foundation
 
 public final class PolicyEngine: Sendable {
-    public init() {}
+    public let policy: ExecutionPolicy
+
+    public init(policy: ExecutionPolicy) {
+        self.policy = policy
+    }
 
     public func validate(_ command: Command) throws {
-        switch command.type {
+        switch command.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "shell":
-            let cmd = command.payload["cmd"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let cmd = command.stringValue(for: "cmd")?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let base = cmd.split(separator: " ").first.map(String.init) ?? ""
             guard !cmd.isEmpty else {
-                throw RuntimeError.invalidPayload
+                throw RuntimeError.policyViolation("Shell command cannot be empty")
             }
-            _ = try validatedTimeoutMillis(command.payload["timeout_ms"])
+            guard policy.allowedShellCommands.contains(base) else {
+                throw RuntimeError.policyViolation("Command not allowed: \(base)")
+            }
         case "file.write":
-            let path = command.payload["path"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !path.isEmpty, command.payload["content"] != nil else {
-                throw RuntimeError.invalidPayload
+            let path = command.stringValue(for: "path") ?? ""
+
+            guard isPathAllowed(path) else {
+                throw RuntimeError.policyViolation("Write path blocked: \(path)")
             }
-            _ = try RuntimePathPolicy.validatedURL(for: path)
         case "file.delete":
-            let path = command.payload["path"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard !path.isEmpty else {
-                throw RuntimeError.invalidPayload
+            let path = command.stringValue(for: "path") ?? ""
+
+            guard isPathAllowed(path) else {
+                throw RuntimeError.policyViolation("Delete path blocked: \(path)")
             }
-            _ = try RuntimePathPolicy.validatedURL(for: path)
         case "http.request":
-            let url = command.payload["url"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard url.hasPrefix("http://") || url.hasPrefix("https://") else {
-                throw RuntimeError.policyViolation("HTTP commands require an explicit http(s) URL")
+            let urlString = command.stringValue(for: "url") ?? ""
+            guard let host = URL(string: urlString)?.host,
+                  policy.networkWhitelist.contains(host) else {
+                throw RuntimeError.policyViolation("Network blocked: \(urlString)")
             }
-            _ = try validatedTimeoutMillis(command.payload["timeout_ms"])
         default:
-            throw RuntimeError.unknownCommand(command.type)
+            throw RuntimeError.policyViolation("Unknown command")
         }
     }
 
-    public func validatedTimeoutMillis(_ rawValue: String?) throws -> Int {
-        guard let rawValue, !rawValue.isEmpty else {
-            return ExecutionPolicyLimits.defaultTimeoutMillis
+    private func isPathAllowed(_ path: String) -> Bool {
+        guard let candidate = standardizedPath(path) else {
+            return false
         }
 
-        guard let parsed = Int(rawValue), parsed > 0 else {
-            throw RuntimeError.invalidPayload
+        return policy.allowedWriteRoots.contains { root in
+            guard let normalizedRoot = standardizedPath(root) else {
+                return false
+            }
+
+            let rootPrefix = normalizedRoot.hasSuffix("/") ? normalizedRoot : normalizedRoot + "/"
+            return candidate == normalizedRoot || candidate.hasPrefix(rootPrefix)
+        }
+    }
+
+    private func standardizedPath(_ rawPath: String) -> String? {
+        let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
         }
 
-        guard parsed <= ExecutionPolicyLimits.maximumTimeoutMillis else {
-            throw RuntimeError.policyViolation(
-                "Execution timeout exceeds maximum allowed value of \(ExecutionPolicyLimits.maximumTimeoutMillis)ms"
-            )
+        let baseURL = URL(fileURLWithPath: ".", isDirectory: true).standardizedFileURL
+        let url: URL
+        if trimmed.hasPrefix("/") {
+            url = URL(fileURLWithPath: trimmed, isDirectory: false)
+        } else {
+            url = URL(fileURLWithPath: trimmed, relativeTo: baseURL)
         }
 
-        return parsed
+        return url.standardizedFileURL.path
     }
 }

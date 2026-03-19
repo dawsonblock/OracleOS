@@ -13,6 +13,8 @@ public struct WorldState: Codable, Sendable, Equatable {
     public var lastFailure: String
     public var lastFailedCommandType: String
     public var lastFailureTimedOut: Bool
+    public var lastExecutionBackend: String
+    public var lastExecutionBackendDetail: String
 
     public init(
         files: [String: String] = [:],
@@ -26,7 +28,9 @@ public struct WorldState: Codable, Sendable, Equatable {
         failureCount: Int = 0,
         lastFailure: String = "",
         lastFailedCommandType: String = "",
-        lastFailureTimedOut: Bool = false
+        lastFailureTimedOut: Bool = false,
+        lastExecutionBackend: String = "",
+        lastExecutionBackendDetail: String = ""
     ) {
         self.files = files
         self.lastOutput = lastOutput
@@ -40,6 +44,8 @@ public struct WorldState: Codable, Sendable, Equatable {
         self.lastFailure = lastFailure
         self.lastFailedCommandType = lastFailedCommandType
         self.lastFailureTimedOut = lastFailureTimedOut
+        self.lastExecutionBackend = lastExecutionBackend
+        self.lastExecutionBackendDetail = lastExecutionBackendDetail
     }
 
     public static let empty = WorldState()
