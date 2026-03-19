@@ -31,7 +31,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ArchitectureEnforcement",
-            dependencies: ["Core"],
+            dependencies: ["Core", "Interface", "MultiAgent"],
             path: "Tests/ArchitectureEnforcement"
         ),
     ]

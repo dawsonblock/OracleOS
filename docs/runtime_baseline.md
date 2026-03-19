@@ -32,13 +32,13 @@ The manifest and source layout were still hardened so the package is ready to va
 
 ## Test Counts
 
-Active enforcement suite under `Tests/ArchitectureEnforcement/`:
+Active enforcement + contract suite under `Tests/ArchitectureEnforcement/`:
 
 | Metric | Count |
 |--------|-------|
-| Test files | 6 |
+| Test files | 9 |
 | Support files | 1 |
-| Test methods | 10 |
+| Test methods | 17 |
 
 ## Hygiene Status
 

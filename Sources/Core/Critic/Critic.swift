@@ -21,6 +21,8 @@ public struct BasicCritic: Critic {
 
     public func evaluate(goal: Goal, events: [any DomainEvent], state: WorldState) -> Evaluation {
         let goalText = goal.text.lowercased()
+        let shellEvents = events.compactMap { $0 as? ShellExecutedEvent }
+        let httpEvents = events.compactMap { $0 as? HTTPResponseEvent }
 
         if goalText.hasPrefix("write file ") {
             let path = goalPath(from: goal.text, prefix: "write file ")
@@ -43,20 +45,20 @@ public struct BasicCritic: Critic {
         }
 
         if goalText.hasPrefix("run shell ") || goalText.contains("swift build") || goalText.contains("swift test") {
-            let success = !state.lastOutput.isEmpty || !events.isEmpty
+            let success = shellEvents.contains(where: { $0.status == 0 })
             return Evaluation(
                 success: success,
                 score: success ? 0.9 : 0.1,
-                issues: success ? [] : ["Shell goal produced no observable output."]
+                issues: success ? [] : ["Shell goal did not complete successfully."]
             )
         }
 
         if goalText.hasPrefix("http ") {
-            let success = state.lastHTTPResponseSize >= 0 && !events.isEmpty
+            let success = httpEvents.contains(where: { (200..<500).contains($0.status) })
             return Evaluation(
                 success: success,
                 score: success ? 0.9 : 0.1,
-                issues: success ? [] : ["HTTP goal produced no observable response event."]
+                issues: success ? [] : ["HTTP goal did not produce a valid response event."]
             )
         }
 

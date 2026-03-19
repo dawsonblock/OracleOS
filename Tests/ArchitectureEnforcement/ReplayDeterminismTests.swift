@@ -4,15 +4,7 @@ import XCTest
 
 final class ReplayDeterminismTests: XCTestCase {
     func test_replay_matches_live_state() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: root,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-        let eventsPath = root.appendingPathComponent("events.jsonl", isDirectory: false).path
-
-        let store = FileEventStore(path: eventsPath)
+        let store = InMemoryEventStore()
         let reducer = DefaultReducer()
         let runtime = AgentRuntime(
             loop: AgentLoop(

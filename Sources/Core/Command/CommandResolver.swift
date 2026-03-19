@@ -9,12 +9,21 @@ public final class CommandResolver: Sendable {
             var payload = command.payload
 
             switch normalizedType {
+            case "shell":
+                payload["cmd"] = payload["cmd"]?.trimmingCharacters(in: .whitespacesAndNewlines)
             case "file.write":
-                if (payload["path"] ?? "").isEmpty {
+                let path = payload["path"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if path.isEmpty {
                     payload["path"] = "runtime-output.txt"
+                } else {
+                    payload["path"] = path
                 }
                 payload["content"] = payload["content"] ?? ""
+            case "file.delete":
+                let path = payload["path"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                payload["path"] = path
             case "http.request":
+                payload["url"] = payload["url"]?.trimmingCharacters(in: .whitespacesAndNewlines)
                 payload["method"] = (payload["method"] ?? "GET").uppercased()
             default:
                 break

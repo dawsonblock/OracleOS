@@ -17,6 +17,11 @@ public enum CLIArgumentParser {
             switch argument {
             case "--server":
                 isServer = true
+            case "--goal":
+                if index + 1 < arguments.count {
+                    goalParts.append(arguments[index + 1])
+                    index += 1
+                }
             case "--port":
                 if index + 1 < arguments.count, let parsed = UInt16(arguments[index + 1]) {
                     port = parsed

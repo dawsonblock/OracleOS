@@ -21,6 +21,10 @@ public final class HTTPServer {
     }
 
     public func start(port: UInt16 = 8080) throws {
+        guard serverSocket < 0 else {
+            throw RuntimeError.serverFailure("HTTP listener is already running")
+        }
+
         let socketDescriptor = socket(AF_INET, streamSocketType, 0)
         guard socketDescriptor >= 0 else {
             throw RuntimeError.serverFailure("Unable to create HTTP listener socket")
@@ -108,21 +112,23 @@ public final class HTTPServer {
     }
 
     private func route(_ requestText: String) -> Data {
-        let requestLine = requestText.components(separatedBy: "\r\n").first ?? ""
-        let parts = requestLine.split(separator: " ")
-        guard parts.count >= 2 else {
+        guard let request = HTTPRequestParser.parse(requestText) else {
             return makeResponse(status: 400, body: Data("bad request\n".utf8), contentType: "text/plain")
         }
 
-        let method = String(parts[0])
-        let path = String(parts[1])
-        let body = requestText.components(separatedBy: "\r\n\r\n").dropFirst().joined(separator: "\r\n\r\n")
-
-        switch (method, path) {
+        switch (request.method, request.path) {
         case ("POST", "/goal"):
             do {
-                let state = try runtime.run(goal: Goal(text: body.trimmingCharacters(in: .whitespacesAndNewlines)))
-                let data = try JSONEncoder().encode(state)
+                let goalText = request.body.trimmingCharacters(in: .whitespacesAndNewlines)
+                let state = try runtime.run(goal: Goal(text: goalText))
+                let payload = GoalRunResponse(
+                    status: "ok",
+                    goal: goalText,
+                    commandCount: state.executedCommandIDs.count,
+                    traceCount: state.executionTrace.count,
+                    state: state
+                )
+                let data = try makeJSONBody(payload)
                 return makeResponse(status: 200, body: data, contentType: "application/json")
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
@@ -130,7 +136,9 @@ public final class HTTPServer {
             }
         case ("GET", "/events"):
             do {
-                let data = try JSONEncoder().encode(runtime.recentEvents(limit: 100))
+                let limit = request.queryItems["limit"].flatMap(Int.init) ?? 100
+                let safeLimit = max(1, min(limit, 1000))
+                let data = try makeJSONBody(runtime.recentEvents(limit: safeLimit))
                 return makeResponse(status: 200, body: data, contentType: "application/json")
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
@@ -138,7 +146,7 @@ public final class HTTPServer {
             }
         case ("GET", "/state"):
             do {
-                let data = try JSONEncoder().encode(runtime.currentState())
+                let data = try makeJSONBody(runtime.currentState())
                 return makeResponse(status: 200, body: data, contentType: "application/json")
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
@@ -147,6 +155,12 @@ public final class HTTPServer {
         default:
             return makeResponse(status: 404, body: Data("not found\n".utf8), contentType: "text/plain")
         }
+    }
+
+    private func makeJSONBody<T: Encodable>(_ value: T) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(value)
     }
 
     private func readRequest(from clientSocket: Int32) -> String? {
@@ -190,4 +204,12 @@ public final class HTTPServer {
         response.append(body)
         return response
     }
+}
+
+private struct GoalRunResponse: Encodable {
+    let status: String
+    let goal: String
+    let commandCount: Int
+    let traceCount: Int
+    let state: WorldState
 }
