@@ -4,7 +4,6 @@ public final class ExperimentManager: @unchecked Sendable {
     private let runner: ParallelRunner
     private let ranker: PatchRanker
     private let promptEngine: PromptEngine
-    private let fileManager = FileManager.default
 
     public init(
         runner: ParallelRunner = ParallelRunner(),
@@ -36,7 +35,7 @@ public final class ExperimentManager: @unchecked Sendable {
         let experimentsRoot = defaultExperimentsRoot(
             for: workspaceRootURL
         )
-        try fileManager.createDirectory(at: experimentsRoot, withIntermediateDirectories: true)
+        try RuntimeFilesystem.ensureDirectory(at: experimentsRoot)
         let snapshot = RepositoryIndexer().indexIfNeeded(workspaceRoot: workspaceRootURL)
         let promptDiagnostics = bounded.promptDiagnostics
             ?? promptEngine.experimentGeneration(
@@ -79,7 +78,7 @@ public final class ExperimentManager: @unchecked Sendable {
 
     public func loadResults(for spec: ExperimentSpec) throws -> [ExperimentResult] {
         let url = resultsURL(for: spec)
-        let data = try Data(contentsOf: url)
+        let data = try RuntimeFilesystem.loadData(at: url)
         return try JSONDecoder().decode([ExperimentResult].self, from: data)
     }
 
@@ -89,9 +88,9 @@ public final class ExperimentManager: @unchecked Sendable {
         experimentsRoot: URL
     ) throws {
         let resultURL = resultsURL(for: spec, experimentsRoot: experimentsRoot)
-        try fileManager.createDirectory(at: resultURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try RuntimeFilesystem.ensureDirectory(at: resultURL.deletingLastPathComponent())
         let data = try JSONEncoder().encode(results)
-        try data.write(to: resultURL)
+        try RuntimeFilesystem.saveData(data, to: resultURL)
     }
 
     private func resultsURL(for spec: ExperimentSpec, experimentsRoot: URL) -> URL {

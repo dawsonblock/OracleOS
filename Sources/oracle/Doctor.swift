@@ -207,12 +207,7 @@ struct Doctor {
     // MARK: - Vision Binary
 
     private mutating func checkVisionBinary() {
-        let candidates = [
-            "/opt/homebrew/bin/oracle-vision",
-            "/usr/local/bin/oracle-vision",
-            (ProcessInfo.processInfo.arguments[0] as NSString)
-                .deletingLastPathComponent + "/oracle-vision",
-        ]
+        let candidates = OracleProductPaths.oracleVisionBinaryCandidates(executableDirectory: (ProcessInfo.processInfo.arguments[0] as NSString).deletingLastPathComponent)
 
         var found = false
         for path in candidates {
@@ -225,7 +220,7 @@ struct Doctor {
 
         if !found {
             // Check venv fallback
-            let venvPython = NSHomeDirectory() + "/.oracle-os/venv/bin/python3"
+            let venvPython = OracleProductPaths.legacyVenvExecutablePath("python3")
             if FileManager.default.isExecutableFile(atPath: venvPython) {
                 let result = runShell("\(venvPython) -c 'import mlx_vlm; print(\"ok\")' 2>/dev/null")
                 if result.exitCode == 0 && result.output.contains("ok") {
@@ -362,7 +357,7 @@ struct Doctor {
     }
 
     private func resolveBinaryPath() -> String {
-        for path in ["/opt/homebrew/bin/oracle", "/usr/local/bin/oracle"] {
+        for path in OracleProductPaths.systemOracleBinaryCandidates {
             if FileManager.default.isExecutableFile(atPath: path) {
                 return path
             }
@@ -376,23 +371,13 @@ struct Doctor {
     }
 
     private func runShell(_ command: String) -> ShellResult {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
-        process.standardOutput = pipe
-        process.standardError = pipe
-        var env = ProcessInfo.processInfo.environment
-        env.removeValue(forKey: "CLAUDE_CODE")
-        env.removeValue(forKey: "CLAUDECODE")
-        process.environment = env
-
         do {
-            try process.run()
-            // Read pipe BEFORE waitUntilExit to avoid deadlock if output exceeds pipe buffer
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return ShellResult(output: String(data: data, encoding: .utf8) ?? "", exitCode: process.terminationStatus)
+            let result = try VerifiedExecutor.runSubprocess(
+                executable: VerifiedExecutor.loginShellExecutablePath,
+                arguments: ["-c", command],
+                environment: VerifiedExecutor.sanitizedEnvironment(removing: ["CLAUDE_CODE", "CLAUDECODE"])
+            )
+            return ShellResult(output: result.combinedOutput, exitCode: result.exitCode)
         } catch {
             return ShellResult(output: "", exitCode: -1)
         }

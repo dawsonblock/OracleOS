@@ -6,10 +6,7 @@ public final class FailureArtifactWriter {
 
     public init(baseURL: URL) {
         self.baseURL = baseURL
-        try? FileManager.default.createDirectory(
-            at: baseURL,
-            withIntermediateDirectories: true
-        )
+        try? RuntimeFilesystem.ensureDirectory(at: baseURL)
     }
 
     public convenience init() {
@@ -24,7 +21,7 @@ public final class FailureArtifactWriter {
     ) -> String? {
         let fileURL = artifactURL(sessionID: sessionID, stepID: stepID, name: name, ext: "txt")
         do {
-            try contents.write(to: fileURL, atomically: true, encoding: .utf8)
+            try RuntimeFilesystem.saveText(contents, to: fileURL)
             return fileURL.path
         } catch {
             Log.warn("Failed to write text artifact: \(error)")
@@ -45,7 +42,7 @@ public final class FailureArtifactWriter {
 
         do {
             let data = try encoder.encode(observation)
-            try data.write(to: fileURL)
+            try RuntimeFilesystem.saveData(data, to: fileURL)
             return fileURL.path
         } catch {
             Log.warn("Failed to write observation artifact: \(error)")
@@ -70,7 +67,7 @@ public final class FailureArtifactWriter {
         }
 
         do {
-            try png.write(to: fileURL)
+            try RuntimeFilesystem.saveData(png, to: fileURL)
             return fileURL.path
         } catch {
             Log.warn("Failed to write screenshot artifact: \(error)")

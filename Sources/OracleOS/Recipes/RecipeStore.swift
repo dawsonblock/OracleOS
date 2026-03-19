@@ -14,16 +14,15 @@ public enum RecipeStore {
 
     /// List all available recipes. Logs decode errors for broken recipe files.
     public static func listRecipes() -> [Recipe] {
-        let fm = FileManager.default
         ensureDirectory()
 
         var recipes: [Recipe] = []
-        guard let files = try? fm.contentsOfDirectory(atPath: recipesDir) else { return [] }
+        guard let files = try? RuntimeFilesystem.contentsOfDirectory(atPath: recipesDir) else { return [] }
 
         let decoder = JSONDecoder()
         for file in files where file.hasSuffix(".json") {
             let path = (recipesDir as NSString).appendingPathComponent(file)
-            guard let data = fm.contents(atPath: path) else { continue }
+            guard let data = RuntimeFilesystem.loadData(atPath: path) else { continue }
             do {
                 let recipe = try decoder.decode(Recipe.self, from: data)
                 recipes.append(recipe)
@@ -39,7 +38,7 @@ public enum RecipeStore {
     /// Load a specific recipe by name. Returns nil with logged error if decode fails.
     public static func loadRecipe(named name: String) -> Recipe? {
         let path = (recipesDir as NSString).appendingPathComponent("\(name).json")
-        guard let data = FileManager.default.contents(atPath: path) else {
+        guard let data = RuntimeFilesystem.loadData(atPath: path) else {
             Log.info("Recipe '\(name)' not found at \(path)")
             return nil
         }
@@ -58,14 +57,14 @@ public enum RecipeStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(recipe)
-        try data.write(to: URL(fileURLWithPath: path))
+        try RuntimeFilesystem.saveData(data, to: URL(fileURLWithPath: path))
     }
 
     /// Delete a recipe by name.
     public static func deleteRecipe(named name: String) -> Bool {
         let path = (recipesDir as NSString).appendingPathComponent("\(name).json")
         do {
-            try FileManager.default.removeItem(atPath: path)
+            try RuntimeFilesystem.deleteItem(atPath: path)
             return true
         } catch {
             return false
@@ -102,9 +101,6 @@ public enum RecipeStore {
     }
 
     private static func ensureDirectory() {
-        try? FileManager.default.createDirectory(
-            atPath: recipesDir,
-            withIntermediateDirectories: true
-        )
+        try? RuntimeFilesystem.ensureDirectory(atPath: recipesDir)
     }
 }

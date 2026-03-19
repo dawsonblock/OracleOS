@@ -16,7 +16,7 @@ public struct RefreshIndexStrategy: RecoveryStrategy {
 
         let command = CommandSpec(
             category: .indexRepository,
-            executable: "/usr/bin/env",
+            executable: VerifiedExecutor.envExecutablePath,
             arguments: [],
             workspaceRoot: repositorySnapshot.workspaceRoot,
             summary: "index repository"

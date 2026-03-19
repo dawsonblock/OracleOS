@@ -50,7 +50,7 @@ Primary user-owned storage:
 - `~/Library/Application Support/Oracle OS/Traces/`
 - `~/Library/Application Support/Oracle OS/Recipes/`
 - `~/Library/Application Support/Oracle OS/Approvals/`
-- `~/Library/Application Support/Oracle OS/ProjectMemory/`
+- `~/Library/Application Support/Oracle OS/Observability/Memory/`
 - `~/Library/Application Support/Oracle OS/Experiments/`
 - `~/Library/Logs/Oracle OS/`
 

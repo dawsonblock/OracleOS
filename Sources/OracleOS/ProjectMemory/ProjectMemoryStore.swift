@@ -47,18 +47,15 @@ public final class ProjectMemoryStore: @unchecked Sendable {
     }
 
     public func ensureStructure() throws {
-        try FileManager.default.createDirectory(at: rootURL, withIntermediateDirectories: true)
+        try RuntimeFilesystem.ensureDirectory(at: rootURL)
         for kind in ProjectMemoryKind.allCases where kind != .risk {
-            try FileManager.default.createDirectory(
-                at: rootURL.appendingPathComponent(kind.directoryName, isDirectory: true),
-                withIntermediateDirectories: true
-            )
+            try RuntimeFilesystem.ensureDirectory(at: rootURL.appendingPathComponent(kind.directoryName, isDirectory: true))
         }
     }
 
     public func ensureRuntimeStructure() throws {
-        try FileManager.default.createDirectory(at: draftsURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: residueURL, withIntermediateDirectories: true)
+        try RuntimeFilesystem.ensureDirectory(at: draftsURL)
+        try RuntimeFilesystem.ensureDirectory(at: residueURL)
     }
 
     public func syncIndex() {
@@ -85,7 +82,7 @@ public final class ProjectMemoryStore: @unchecked Sendable {
             path: fileURL.path,
             body: renderMarkdown(for: draft, id: fileURL.deletingPathExtension().lastPathComponent)
         )
-        try record.body.write(to: fileURL, atomically: true, encoding: .utf8)
+        try RuntimeFilesystem.saveText(record.body, to: fileURL)
         if draft.knowledgeClass != .episode {
             indexer.upsert(record)
         }
@@ -285,7 +282,7 @@ public final class ProjectMemoryStore: @unchecked Sendable {
             .replacingOccurrences(of: #"[^a-z0-9]+"#, with: "-", options: .regularExpression)
             .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
         let directory = draftsURL.appendingPathComponent(draft.kind.directoryName, isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? RuntimeFilesystem.ensureDirectory(at: directory)
         return directory.appendingPathComponent("\(datePrefix)-\(slug).md", isDirectory: false)
     }
 

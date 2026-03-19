@@ -704,12 +704,21 @@ public final class OracleRuntime {
                 }
                 let existing = FileManager.default.contents(atPath: fileURL.path).flatMap { String(data: $0, encoding: .utf8) } ?? ""
                 let content = intent.text ?? existing
-                try content.write(to: fileURL, atomically: true, encoding: .utf8)
+                let events = try VerifiedExecutor(policy: context.policyEngine).execute(
+                    Command(type: "file.write", payload: [
+                        "path": fileURL.path,
+                        "content": content,
+                    ])
+                )
+                CommitCoordinator().commit(events)
+                let projectedState = DefaultReducer().apply(events, to: .empty)
                 return ToolResult(
                     success: true,
                     data: [
-                        "method": "workspace-write",
+                        "method": "verified-executor",
+                        "event_types": events.map { $0.type },
                         "patch_id": UUID().uuidString,
+                        "projected_files": projectedState.files,
                         "code_execution": [
                             "workspace_root": command.workspaceRoot,
                             "workspace_relative_path": relativePath,
@@ -796,6 +805,14 @@ public final class OracleRuntime {
         budget: LoopBudget = LoopBudget(),
         rawActionExecutor: @escaping @MainActor (ActionIntent) -> ToolResult
     ) async -> LoopOutcome {
+        _ = await AgentRuntime(
+            planner: Planner(),
+            executor: VerifiedExecutor(policy: context.policyEngine),
+            coordinator: CommitCoordinator(),
+            reducer: DefaultReducer(),
+            critic: BasicCritic(),
+            repair: RepairEngine()
+        ).run(goal: goal)
         let loop = AgentLoop(
             observationProvider: observationProvider,
             executionDriver: makeExecutionDriver(

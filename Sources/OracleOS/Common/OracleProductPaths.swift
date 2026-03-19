@@ -100,6 +100,101 @@ public enum OracleProductPaths {
         visionModelsDirectory.appendingPathComponent("ShowUI-2B", isDirectory: true)
     }
 
+    public static var legacyVenvRootDirectory: URL {
+        legacyOracleRootDirectory.appendingPathComponent("venv", isDirectory: true)
+    }
+
+    public static func legacyVenvExecutablePath(_ executable: String) -> String {
+        legacyVenvRootDirectory
+            .appendingPathComponent("bin", isDirectory: true)
+            .appendingPathComponent(executable, isDirectory: false)
+            .path
+    }
+
+    public static var claudeBinaryCandidates: [String] {
+        [
+            "/usr/local/bin/claude",
+            "/opt/homebrew/bin/claude",
+        ]
+    }
+
+    public static var systemPythonCandidates: [String] {
+        [
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
+        ]
+    }
+
+    public static var systemOracleBinaryCandidates: [String] {
+        [
+            "/opt/homebrew/bin/oracle",
+            "/usr/local/bin/oracle",
+        ]
+    }
+
+    public static var systemOracleVisionBinaryCandidates: [String] {
+        [
+            "/opt/homebrew/bin/oracle-vision",
+            "/usr/local/bin/oracle-vision",
+        ]
+    }
+
+    public static var homebrewRecipesDirectories: [String] {
+        [
+            "/opt/homebrew/share/oracle-os/recipes",
+            "/usr/local/share/oracle-os/recipes",
+        ]
+    }
+
+    public static var visionModelCandidateDirectories: [String] {
+        [
+            visionModelDirectory.path,
+            "/opt/homebrew/share/oracle-os/models/ShowUI-2B",
+            NSHomeDirectory() + "/.oracle-os/models/ShowUI-2B",
+            NSHomeDirectory() + "/.oracle-os/models/llm/ShowUI-2B-bf16-8bit",
+        ]
+    }
+
+    public static func oracleVisionBinaryCandidates(executableDirectory: String) -> [String] {
+        [
+            visionInstallDirectory.appendingPathComponent("oracle-vision", isDirectory: false).path,
+            bundledVisionBootstrapDirectory?.appendingPathComponent("oracle-vision", isDirectory: false).path,
+        ]
+        .compactMap { $0 }
+        + systemOracleVisionBinaryCandidates
+        + [
+            executableDirectory + "/oracle-vision",
+            executableDirectory + "/../Infra/Sidecars/vision-sidecar/oracle-vision",
+        ]
+    }
+
+    public static func visionServerScriptCandidates(executableDirectory: String) -> [String] {
+        [
+            visionInstallDirectory.appendingPathComponent("server.py", isDirectory: false).path,
+            bundledVisionBootstrapDirectory?.appendingPathComponent("server.py", isDirectory: false).path,
+            "/opt/homebrew/share/oracle-os/vision-sidecar/server.py",
+            "/usr/local/share/oracle-os/vision-sidecar/server.py",
+            executableDirectory + "/Infra/Sidecars/vision-sidecar/server.py",
+            (executableDirectory as NSString).deletingLastPathComponent + "/Infra/Sidecars/vision-sidecar/server.py",
+            ((executableDirectory as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent + "/Infra/Sidecars/vision-sidecar/server.py",
+        ]
+        .compactMap { $0 }
+    }
+
+    public static var visionPythonCandidates: [String] {
+        [
+            visionInstallDirectory
+                .appendingPathComponent(".venv", isDirectory: true)
+                .appendingPathComponent("bin", isDirectory: true)
+                .appendingPathComponent("python3", isDirectory: false)
+                .path,
+            legacyVenvExecutablePath("python3"),
+            systemPythonCandidates[0],
+            systemPythonCandidates[1],
+        ]
+    }
+
     public static var legacyOracleRootDirectory: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".oracle-os", isDirectory: true)
@@ -170,7 +265,7 @@ public enum OracleProductPaths {
         }
 
         if let developerRoot = developerProjectRoot {
-            let bundled = developerRoot.appendingPathComponent("vision-sidecar", isDirectory: true)
+            let bundled = developerRoot.appendingPathComponent("Infra/Sidecars/vision-sidecar", isDirectory: true)
             if FileManager.default.fileExists(atPath: bundled.path) {
                 return bundled
             }

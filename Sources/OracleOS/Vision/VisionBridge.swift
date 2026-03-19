@@ -250,14 +250,13 @@ public enum VisionBridge {
         // Strategy 1: Use oracle-vision launcher script (handles venv/Python resolution)
         if let launcher = findOracleVisionBinary() {
             Log.info("Starting vision sidecar via \(launcher)")
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: launcher)
-            process.arguments = ["--idle-timeout", "600"]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.standardError
-
             do {
-                try process.run()
+                let process = try VerifiedExecutor.spawnSubprocess(
+                    executable: launcher,
+                    arguments: ["--idle-timeout", "600"],
+                    standardOutput: FileHandle.nullDevice,
+                    standardError: FileHandle.standardError
+                )
                 lifecycle.process = process
             } catch {
                 Log.error("Failed to start vision sidecar via launcher: \(error)")
@@ -267,7 +266,9 @@ public enum VisionBridge {
 
             if waitForSidecar() {
                 lifecycle.state = .ready
-                Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                if let process = lifecycle.process {
+                    Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                }
                 return true
             }
             lifecycle.state = .failed
@@ -285,14 +286,13 @@ public enum VisionBridge {
                 return false
             }
 
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: python)
-            process.arguments = [script, "--idle-timeout", "600"]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.standardError
-
             do {
-                try process.run()
+                let process = try VerifiedExecutor.spawnSubprocess(
+                    executable: python,
+                    arguments: [script, "--idle-timeout", "600"],
+                    standardOutput: FileHandle.nullDevice,
+                    standardError: FileHandle.standardError
+                )
                 lifecycle.process = process
             } catch {
                 Log.error("Failed to start vision sidecar: \(error)")
@@ -302,7 +302,9 @@ public enum VisionBridge {
 
             if waitForSidecar() {
                 lifecycle.state = .ready
-                Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                if let process = lifecycle.process {
+                    Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                }
                 return true
             }
             lifecycle.state = .failed
@@ -330,14 +332,7 @@ public enum VisionBridge {
     /// Find the oracle-vision launcher script/binary.
     private static func findOracleVisionBinary() -> String? {
         let executableDirectory = (ProcessInfo.processInfo.arguments[0] as NSString).deletingLastPathComponent
-        let candidates: [String] = [
-            OracleProductPaths.visionInstallDirectory.appendingPathComponent("oracle-vision", isDirectory: false).path,
-            OracleProductPaths.bundledVisionBootstrapDirectory?.appendingPathComponent("oracle-vision", isDirectory: false).path,
-            "/opt/homebrew/bin/oracle-vision",
-            "/usr/local/bin/oracle-vision",
-            executableDirectory + "/oracle-vision",
-            executableDirectory + "/../vision-sidecar/oracle-vision",
-        ].compactMap { $0 }
+        let candidates = OracleProductPaths.oracleVisionBinaryCandidates(executableDirectory: executableDirectory)
 
         for path in candidates {
             if FileManager.default.isExecutableFile(atPath: path) {
@@ -350,16 +345,7 @@ public enum VisionBridge {
     /// Find the server.py script in expected locations.
     private static func findServerScript() -> String? {
         let executableDirectory = (ProcessInfo.processInfo.arguments[0] as NSString).deletingLastPathComponent
-        let bundledVisionDirectory = OracleProductPaths.bundledVisionBootstrapDirectory
-        let candidates: [String] = [
-            OracleProductPaths.visionInstallDirectory.appendingPathComponent("server.py", isDirectory: false).path,
-            bundledVisionDirectory?.appendingPathComponent("server.py", isDirectory: false).path,
-            "/opt/homebrew/share/oracle-os/vision-sidecar/server.py",
-            "/usr/local/share/oracle-os/vision-sidecar/server.py",
-            executableDirectory + "/vision-sidecar/server.py",
-            (executableDirectory as NSString).deletingLastPathComponent + "/vision-sidecar/server.py",
-            ((executableDirectory as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent + "/vision-sidecar/server.py",
-        ].compactMap { $0 }
+        let candidates = OracleProductPaths.visionServerScriptCandidates(executableDirectory: executableDirectory)
 
         for path in candidates {
             if FileManager.default.fileExists(atPath: path) {
@@ -373,21 +359,8 @@ public enum VisionBridge {
     /// Returns nil if no suitable Python is found.
     private static func findPython() -> String? {
         // Check venv first (most likely to have mlx_vlm)
-        let candidates = [
-            OracleProductPaths.visionInstallDirectory
-                .appendingPathComponent(".venv/bin/python3", isDirectory: false)
-                .path,
-            NSHomeDirectory() + "/.oracle-os/venv/bin/python3",
-        ]
-        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+        for candidate in OracleProductPaths.visionPythonCandidates where FileManager.default.isExecutableFile(atPath: candidate) {
             return candidate
-        }
-
-        // Homebrew Python
-        for path in ["/opt/homebrew/bin/python3", "/usr/local/bin/python3"] {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return path
-            }
         }
 
         return nil
@@ -398,12 +371,7 @@ public enum VisionBridge {
     /// Check if the ShowUI-2B model exists at any known location.
     /// Returns the path if found, nil otherwise.
     public static func findModelPath() -> String? {
-        let candidates = [
-            OracleProductPaths.visionModelDirectory.path,
-            "/opt/homebrew/share/oracle-os/models/ShowUI-2B",
-            NSHomeDirectory() + "/.oracle-os/models/ShowUI-2B",
-            NSHomeDirectory() + "/.oracle-os/models/llm/ShowUI-2B-bf16-8bit",
-        ]
+        let candidates = OracleProductPaths.visionModelCandidateDirectories
 
         for path in candidates {
             let safetensors = (path as NSString).appendingPathComponent("model.safetensors")
@@ -450,32 +418,10 @@ public enum VisionBridge {
         return performRequest(request)
     }
 
-    /// Perform a synchronous URLSession request. Blocks the calling thread
-    /// using a semaphore (acceptable since MCP server is single-threaded).
     private static func performRequest(_ request: URLRequest) -> [String: Any]? {
-        let semaphore = DispatchSemaphore(value: 0)
-
-        // Use nonisolated Sendable box to shuttle data across the closure boundary.
-        // The class must be nonisolated to escape @MainActor default isolation,
-        // since the URLSession completion handler runs on a background thread.
-        nonisolated final class ResponseBox: @unchecked Sendable {
-            var data: Data?
-            var error: (any Error)?
-        }
-        let box = ResponseBox()
-
-        // Use a detached session to avoid MainActor issues
-        let session = URLSession(configuration: .default)
-        let task = session.dataTask(with: request) { data, _, error in
-            box.data = data
-            box.error = error
-            semaphore.signal()
-        }
-        task.resume()
-        semaphore.wait()
-
-        if let error = box.error {
-            // Don't log connection refused as error — sidecar might not be running
+        do {
+            return try VerifiedExecutor.performJSONRequest(request) as? [String: Any]
+        } catch {
             let nsError = error as NSError
             if nsError.code == NSURLErrorCannotConnectToHost ||
                nsError.code == NSURLErrorTimedOut ||
@@ -487,13 +433,5 @@ public enum VisionBridge {
             }
             return nil
         }
-
-        guard let data = box.data,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return nil
-        }
-
-        return json
     }
 }

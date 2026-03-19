@@ -102,7 +102,7 @@ enum CodeSkillSupport {
     ) -> CommandSpec {
         CommandSpec(
             category: category,
-            executable: "/usr/bin/env",
+            executable: VerifiedExecutor.envExecutablePath,
             arguments: arguments,
             workspaceRoot: workspaceRoot.path,
             workspaceRelativePath: workspaceRelativePath,

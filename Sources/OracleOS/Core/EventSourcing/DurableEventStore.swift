@@ -12,16 +12,9 @@ public final class DurableEventStore: Sendable {
     /// Appends a new event to the store.
     public func append(event: ExecutionEvent) throws {
         let data = try JSONEncoder().encode(event)
-        if let handle = try? FileHandle(forWritingTo: storageURL) {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            handle.write("\n".data(using: .utf8)!)
-            handle.closeFile()
-        } else {
-            var lineData = data
-            lineData.append("\n".data(using: .utf8)!)
-            try lineData.write(to: storageURL)
-        }
+        var lineData = data
+        lineData.append(0x0A)
+        try RuntimeFilesystem.append(lineData, to: storageURL)
     }
 }
 

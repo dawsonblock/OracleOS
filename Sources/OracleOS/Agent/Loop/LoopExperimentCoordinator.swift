@@ -76,7 +76,7 @@ public final class LoopExperimentCoordinator {
 
             let replayCommand = CommandSpec(
                 category: .generatePatch,
-                executable: "/usr/bin/env",
+                executable: VerifiedExecutor.envExecutablePath,
                 arguments: [],
                 workspaceRoot: experimentSpec.workspaceRoot,
                 workspaceRelativePath: selected.workspaceRelativePath,

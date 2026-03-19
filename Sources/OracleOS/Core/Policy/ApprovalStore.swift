@@ -21,9 +21,9 @@ public final class ApprovalStore: @unchecked Sendable {
         self.decoder = JSONDecoder()
         self.decoder.dateDecodingStrategy = .iso8601
 
-        try? FileManager.default.createDirectory(at: requestsDirectory, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: receiptsDirectory, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: stateDirectory, withIntermediateDirectories: true)
+        try? RuntimeFilesystem.ensureDirectory(at: requestsDirectory)
+        try? RuntimeFilesystem.ensureDirectory(at: receiptsDirectory)
+        try? RuntimeFilesystem.ensureDirectory(at: stateDirectory)
     }
 
     public convenience init() {
@@ -31,13 +31,13 @@ public final class ApprovalStore: @unchecked Sendable {
     }
 
     public func isActive() -> Bool {
-        FileManager.default.fileExists(atPath: rootDirectory.path)
+        RuntimeFilesystem.fileExists(atPath: rootDirectory.path)
     }
 
     public func createRequest(_ request: ApprovalRequest) throws -> ApprovalRequest {
         let fileURL = requestFileURL(for: request.id)
         let data = try encoder.encode(request)
-        try data.write(to: fileURL)
+        try RuntimeFilesystem.saveData(data, to: fileURL)
         return request
     }
 
@@ -61,10 +61,10 @@ public final class ApprovalStore: @unchecked Sendable {
             appProtectionProfile: request.appProtectionProfile,
             status: .approved
         )
-        try encoder.encode(approved).write(to: requestFileURL(for: requestID))
+        try RuntimeFilesystem.saveData(encoder.encode(approved), to: requestFileURL(for: requestID))
 
         let receipt = ApprovalReceipt(requestID: requestID, actionFingerprint: request.actionFingerprint)
-        try encoder.encode(receipt).write(to: receiptFileURL(for: requestID))
+        try RuntimeFilesystem.saveData(encoder.encode(receipt), to: receiptFileURL(for: requestID))
         return receipt
     }
 
@@ -84,20 +84,20 @@ public final class ApprovalStore: @unchecked Sendable {
             appProtectionProfile: request.appProtectionProfile,
             status: .rejected
         )
-        try encoder.encode(rejected).write(to: requestFileURL(for: requestID))
-        try? FileManager.default.removeItem(at: receiptFileURL(for: requestID))
+        try RuntimeFilesystem.saveData(encoder.encode(rejected), to: requestFileURL(for: requestID))
+        try? RuntimeFilesystem.deleteItem(at: receiptFileURL(for: requestID))
     }
 
     public func consumeApprovedReceipt(requestID: String, actionFingerprint: String) -> ApprovalReceipt? {
         let fileURL = receiptFileURL(for: requestID)
-        guard let data = try? Data(contentsOf: fileURL),
+        guard let data = try? RuntimeFilesystem.loadData(at: fileURL),
               let receipt = try? decoder.decode(ApprovalReceipt.self, from: data),
               receipt.actionFingerprint == actionFingerprint
         else {
             return nil
         }
 
-        try? FileManager.default.removeItem(at: fileURL)
+        try? RuntimeFilesystem.deleteItem(at: fileURL)
 
         if let request = try? loadRequest(id: requestID) {
             let executed = ApprovalRequest(
@@ -114,7 +114,7 @@ public final class ApprovalStore: @unchecked Sendable {
                 appProtectionProfile: request.appProtectionProfile,
                 status: .executed
             )
-            try? encoder.encode(executed).write(to: requestFileURL(for: requestID))
+            try? RuntimeFilesystem.saveData(encoder.encode(executed), to: requestFileURL(for: requestID))
         }
 
         return ApprovalReceipt(
@@ -133,7 +133,7 @@ public final class ApprovalStore: @unchecked Sendable {
         ]
 
         if let data = try? JSONSerialization.data(withJSONObject: state, options: [.sortedKeys]) {
-            try? data.write(to: controllerHeartbeatFileURL())
+            try? RuntimeFilesystem.saveData(data, to: controllerHeartbeatFileURL())
         }
     }
 
@@ -149,19 +149,19 @@ public final class ApprovalStore: @unchecked Sendable {
     }
 
     private func loadRequests() -> [ApprovalRequest] {
-        guard let files = try? FileManager.default.contentsOfDirectory(at: requestsDirectory, includingPropertiesForKeys: nil) else {
+        guard let files = try? RuntimeFilesystem.contentsOfDirectory(at: requestsDirectory) else {
             return []
         }
 
         return files.compactMap { url in
-            guard let data = try? Data(contentsOf: url) else { return nil }
+            guard let data = try? RuntimeFilesystem.loadData(at: url) else { return nil }
             return try? decoder.decode(ApprovalRequest.self, from: data)
         }
     }
 
     private func loadRequest(id: String) throws -> ApprovalRequest {
         let fileURL = requestFileURL(for: id)
-        let data = try Data(contentsOf: fileURL)
+        let data = try RuntimeFilesystem.loadData(at: fileURL)
         return try decoder.decode(ApprovalRequest.self, from: data)
     }
 

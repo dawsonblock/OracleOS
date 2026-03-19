@@ -15,10 +15,7 @@ public final class TraceStore: @unchecked Sendable {
         self.encoder = JSONEncoder()
         self.encoder.dateEncodingStrategy = .iso8601
 
-        try? FileManager.default.createDirectory(
-            at: directoryURL,
-            withIntermediateDirectories: true
-        )
+        try? RuntimeFilesystem.ensureDirectory(at: directoryURL)
     }
 
     public convenience init() {
@@ -35,14 +32,7 @@ public final class TraceStore: @unchecked Sendable {
         var line = data
         line.append(0x0A)
 
-        if !FileManager.default.fileExists(atPath: fileURL.path) {
-            FileManager.default.createFile(atPath: fileURL.path, contents: nil, attributes: nil)
-        }
-
-        let handle = try FileHandle(forWritingTo: fileURL)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
-        try handle.write(contentsOf: line)
+        try RuntimeFilesystem.append(line, to: fileURL)
         return fileURL
     }
 
