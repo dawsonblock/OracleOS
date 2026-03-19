@@ -2,12 +2,12 @@ import Core
 import Foundation
 
 public enum MultiAgentError: Error, LocalizedError, Sendable {
-    case conflictingFileWrites([String])
+    case conflictingFileCommands([String])
 
     public var errorDescription: String? {
         switch self {
-        case let .conflictingFileWrites(paths):
-            return "Conflicting file.write commands detected: \(paths.joined(separator: ", "))"
+        case let .conflictingFileCommands(paths):
+            return "Conflicting file commands detected: \(paths.joined(separator: ", "))"
         }
     }
 }
@@ -29,22 +29,24 @@ public final class MultiAgentCoordinator: Sendable {
 
     @discardableResult
     public func run(goal: Goal) throws -> WorldState {
-        let state = try runtime.currentState()
-        let proposals = plannedCommands(goal: goal, state: state)
-        try detectConflicts(in: proposals)
+        var state = try runtime.currentState()
+        var reservedPaths = [String: Int]()
 
-        guard proposals.contains(where: { !$0.commands.isEmpty }) else {
-            return state
-        }
-
-        var finalState = state
         for (plannerIndex, planner) in planners.enumerated() {
-            guard !proposals[plannerIndex].commands.isEmpty else {
+            let commands = resolver.normalize(planner.plan(goal: goal, state: state))
+            try detectConflicts(
+                commands: commands,
+                plannerIndex: plannerIndex,
+                reservedPaths: &reservedPaths
+            )
+
+            guard !commands.isEmpty else {
                 continue
             }
-            finalState = try runtime.run(goal: goal, planner: planner)
+
+            state = try runtime.runResult(goal: goal, commands: commands).state
         }
-        return finalState
+        return state
     }
 
     public func plannedCommands(goal: Goal, state: WorldState) -> [PlannerCommandBatch] {
@@ -56,27 +58,28 @@ public final class MultiAgentCoordinator: Sendable {
         }
     }
 
-    private func detectConflicts(in proposals: [PlannerCommandBatch]) throws {
-        var seenPaths = [String: Int]()
+    private func detectConflicts(
+        commands: [Command],
+        plannerIndex: Int,
+        reservedPaths: inout [String: Int]
+    ) throws {
         var conflicts = Set<String>()
 
-        for proposal in proposals {
-            for command in proposal.commands where command.type == "file.write" || command.type == "file.delete" {
-                let path = command.payload["path"] ?? ""
-                guard !path.isEmpty else {
-                    continue
-                }
+        for command in commands where command.type == "file.write" || command.type == "file.delete" {
+            let path = command.payload["path"] ?? ""
+            guard !path.isEmpty else {
+                continue
+            }
 
-                if let existingPlannerIndex = seenPaths[path], existingPlannerIndex != proposal.plannerIndex {
-                    conflicts.insert(path)
-                } else {
-                    seenPaths[path] = proposal.plannerIndex
-                }
+            if let existingPlannerIndex = reservedPaths[path], existingPlannerIndex != plannerIndex {
+                conflicts.insert(path)
+            } else {
+                reservedPaths[path] = plannerIndex
             }
         }
 
         if !conflicts.isEmpty {
-            throw MultiAgentError.conflictingFileWrites(conflicts.sorted())
+            throw MultiAgentError.conflictingFileCommands(conflicts.sorted())
         }
     }
 }

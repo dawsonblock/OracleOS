@@ -38,7 +38,7 @@ Active enforcement + contract suite under `Tests/ArchitectureEnforcement/`:
 |--------|-------|
 | Test files | 10 |
 | Support files | 1 |
-| Test methods | 32 |
+| Test methods | 37 |
 
 ## Hygiene Status
 
@@ -49,3 +49,4 @@ Active enforcement + contract suite under `Tests/ArchitectureEnforcement/`:
 - Active runtime code now lives only under `Sources/Core`, `Sources/Interface`, `Sources/MultiAgent`, and `Sources/App`
 - Active executor policy now enforces workspace-bounded file commands and bounded shell/HTTP timeouts
 - Failure and timeout outcomes are now emitted as structured runtime events and surfaced in runtime state / HTTP goal responses
+- Obsolete controller release artifacts were removed from the active repo root (`Package.resolved`, controller release workflow, generator script, standalone Xcode project/workspace files)

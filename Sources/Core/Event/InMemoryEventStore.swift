@@ -2,7 +2,6 @@ import Foundation
 
 public final class InMemoryEventStore: EventStore, @unchecked Sendable {
     private var envelopes: [EventEnvelope]
-    private let encoder = JSONEncoder()
 
     public init(envelopes: [EventEnvelope] = []) {
         self.envelopes = envelopes
@@ -24,13 +23,5 @@ public final class InMemoryEventStore: EventStore, @unchecked Sendable {
 
     public func load() throws -> [EventEnvelope] {
         envelopes
-    }
-
-    public func reset() {
-        envelopes.removeAll()
-    }
-
-    public func snapshotData() throws -> Data {
-        try encoder.encode(envelopes)
     }
 }

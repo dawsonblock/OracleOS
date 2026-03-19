@@ -16,6 +16,7 @@ public final class HTTPServer {
     private let router: HTTPRouter
     private let queue = DispatchQueue(label: "oracle.runtime.http")
     private var serverSocket: Int32 = -1
+    private let maximumRequestBytes = 1_048_576
 
     public init(runtime: AgentRuntime, router: HTTPRouter = HTTPRouter()) {
         self.runtime = runtime
@@ -124,16 +125,31 @@ public final class HTTPServer {
     }
 
     private func readRequest(from clientSocket: Int32) -> String? {
-        var buffer = [UInt8](repeating: 0, count: 65_536)
-        let bytesRead = buffer.withUnsafeMutableBytes { rawBuffer in
-            recv(clientSocket, rawBuffer.baseAddress, rawBuffer.count, 0)
+        var requestData = Data()
+
+        while requestData.count < maximumRequestBytes {
+            var chunk = [UInt8](repeating: 0, count: 4096)
+            let bytesRead = chunk.withUnsafeMutableBytes { rawBuffer in
+                recv(clientSocket, rawBuffer.baseAddress, rawBuffer.count, 0)
+            }
+
+            if bytesRead <= 0 {
+                break
+            }
+
+            requestData.append(contentsOf: chunk.prefix(Int(bytesRead)))
+
+            if let requestText = String(data: requestData, encoding: .utf8),
+               HTTPRequestParser.isCompleteRequest(requestText) {
+                return requestText
+            }
         }
 
-        guard bytesRead > 0 else {
+        guard !requestData.isEmpty else {
             return nil
         }
 
-        return String(decoding: buffer.prefix(Int(bytesRead)), as: UTF8.self)
+        return String(data: requestData, encoding: .utf8)
     }
 
     private func writeResponse(_ response: Data, to clientSocket: Int32) {

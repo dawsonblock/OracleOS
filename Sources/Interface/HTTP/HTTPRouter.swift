@@ -29,6 +29,7 @@ public struct HTTPRouter {
                 traceCount: result.state.executionTrace.count,
                 emittedEventCount: result.emittedEventCount,
                 issues: result.issues,
+                summary: RuntimeViewBuilder.stateSummary(from: result.state),
                 state: result.state
             )
             return json(status: 200, payload)
@@ -41,7 +42,8 @@ public struct HTTPRouter {
         do {
             let limit = request.queryItems["limit"].flatMap(Int.init) ?? 100
             let safeLimit = max(1, min(limit, 1000))
-            return json(status: 200, try runtime.recentEvents(limit: safeLimit))
+            let events = try runtime.recentEventSummaries(limit: safeLimit)
+            return json(status: 200, EventListResponse(count: events.count, events: events))
         } catch {
             return plainText(status: 500, text: errorMessage(error))
         }
@@ -49,7 +51,8 @@ public struct HTTPRouter {
 
     private func state(runtime: AgentRuntime) -> HTTPResponse {
         do {
-            return json(status: 200, try runtime.currentState())
+            let state = try runtime.currentState()
+            return json(status: 200, StateViewResponse(summary: RuntimeViewBuilder.stateSummary(from: state), state: state))
         } catch {
             return plainText(status: 500, text: errorMessage(error))
         }
@@ -84,5 +87,16 @@ private struct GoalRunResponse: Encodable {
     let traceCount: Int
     let emittedEventCount: Int
     let issues: [String]
+    let summary: RuntimeStateSummary
+    let state: WorldState
+}
+
+private struct EventListResponse: Encodable {
+    let count: Int
+    let events: [RuntimeEventSummary]
+}
+
+private struct StateViewResponse: Encodable {
+    let summary: RuntimeStateSummary
     let state: WorldState
 }

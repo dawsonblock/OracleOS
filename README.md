@@ -47,8 +47,6 @@ oracle-runtime/
 ├── ThirdParty/
 │   ├── OpenViking/
 │   └── Vendor/
-├── Legacy/
-│   └── oracle/
 ├── Legacy/                 # Archived pre-kernel package and tests
 ├── README.md
 └── Package.swift

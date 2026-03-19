@@ -95,6 +95,19 @@ final class RuntimeContractTests: XCTestCase {
         XCTAssertFalse(result.state.lastFailureTimedOut)
         XCTAssertTrue(result.issues.contains("File commands must stay within the workspace root"))
     }
+
+    func test_critic_does_not_treat_preexisting_file_as_success_without_write_event() {
+        let critic = BasicCritic()
+        let state = WorldState(files: ["a.txt": "old"])
+
+        let evaluation = critic.evaluate(
+            goal: Goal(text: "write file a.txt new"),
+            events: [],
+            state: state
+        )
+
+        XCTAssertFalse(evaluation.success)
+    }
 }
 
 private struct FixedPlanner: Planner {

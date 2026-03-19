@@ -22,10 +22,6 @@ public enum RuntimePathPolicy {
         return candidate
     }
 
-    public static func validatedPath(_ path: String) throws -> String {
-        try validatedURL(for: path).path
-    }
-
     private static func workspaceRootURL() -> URL {
         let pwd = ProcessInfo.processInfo.environment["PWD"] ?? "."
         return URL(fileURLWithPath: pwd, isDirectory: true).standardizedFileURL

@@ -22,6 +22,8 @@ public struct BasicCritic: Critic {
     public func evaluate(goal: Goal, events: [any DomainEvent], state: WorldState) -> Evaluation {
         let goalText = goal.text.lowercased()
         let shellEvents = events.compactMap { $0 as? ShellExecutedEvent }
+        let writeEvents = events.compactMap { $0 as? FileWriteRequestedEvent }
+        let deleteEvents = events.compactMap { $0 as? FileDeleteRequestedEvent }
         let httpEvents = events.compactMap { $0 as? HTTPResponseEvent }
         let failureEvents = events.compactMap { $0 as? CommandFailedEvent }
 
@@ -34,22 +36,24 @@ public struct BasicCritic: Critic {
         }
 
         if goalText.hasPrefix("write file ") {
-            let path = goalPath(from: goal.text, prefix: "write file ")
-            let success = state.files[path] != nil
+            let target = writeTarget(from: goal.text)
+            let success = writeEvents.contains {
+                $0.path == target.path && $0.content == target.content
+            }
             return Evaluation(
                 success: success,
                 score: success ? 1.0 : 0.0,
-                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file write did not reach reducer state for \(path)." : state.lastFailure]
+                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file write did not complete for \(target.path)." : state.lastFailure]
             )
         }
 
         if goalText.hasPrefix("delete file ") {
             let path = goalPath(from: goal.text, prefix: "delete file ")
-            let success = state.files[path] == nil
+            let success = deleteEvents.contains { $0.path == path }
             return Evaluation(
                 success: success,
                 score: success ? 1.0 : 0.0,
-                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file delete did not reach reducer state for \(path)." : state.lastFailure]
+                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file delete did not complete for \(path)." : state.lastFailure]
             )
         }
 
@@ -83,5 +87,13 @@ public struct BasicCritic: Critic {
         let remainder = String(text.dropFirst(prefix.count))
         let parts = remainder.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
         return parts.first.map(String.init) ?? "runtime-output.txt"
+    }
+
+    private func writeTarget(from text: String) -> (path: String, content: String) {
+        let remainder = String(text.dropFirst("write file ".count))
+        let parts = remainder.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        let path = parts.first.map(String.init) ?? "runtime-output.txt"
+        let content = parts.count > 1 ? String(parts[1]) : text
+        return (path: path, content: content)
     }
 }

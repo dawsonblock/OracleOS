@@ -30,7 +30,7 @@ final class MultiAgentContractTests: XCTestCase {
         XCTAssertThrowsError(try coordinator.run(goal: Goal(text: "ignored"))) { error in
             XCTAssertEqual(
                 (error as? MultiAgentError)?.errorDescription,
-                "Conflicting file.write commands detected: shared.txt"
+                "Conflicting file commands detected: shared.txt"
             )
         }
     }
@@ -50,6 +50,22 @@ final class MultiAgentContractTests: XCTestCase {
         XCTAssertEqual(state.files["a.txt"], "one")
         XCTAssertEqual(state.files["b.txt"], "two")
         XCTAssertEqual(state.executedCommandIDs.count, 2)
+    }
+
+    func test_state_sensitive_planner_uses_current_state_when_executed() throws {
+        let runtime = makeRuntime()
+        let coordinator = MultiAgentCoordinator(
+            runtime: runtime,
+            planners: [
+                FixedPlanner(commands: [Command(type: "file.write", payload: ["path": "a.txt", "content": "one"])]),
+                StateAwarePlanner(),
+            ]
+        )
+
+        let state = try coordinator.run(goal: Goal(text: "ignored"))
+
+        XCTAssertEqual(state.files["a.txt"], "one")
+        XCTAssertEqual(state.files["b.txt"], "derived")
     }
 
     private func makeRuntime() -> AgentRuntime {
@@ -72,5 +88,15 @@ private struct FixedPlanner: Planner {
 
     func plan(goal: Goal, state: WorldState) -> [Command] {
         commands
+    }
+}
+
+private struct StateAwarePlanner: Planner {
+    func plan(goal: Goal, state: WorldState) -> [Command] {
+        guard state.files["a.txt"] == "one" else {
+            return []
+        }
+
+        return [Command(type: "file.write", payload: ["path": "b.txt", "content": "derived"])]
     }
 }

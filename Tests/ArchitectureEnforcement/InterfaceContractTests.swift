@@ -29,12 +29,16 @@ final class InterfaceContractTests: XCTestCase {
         XCTAssertNil(request)
     }
 
+    func test_http_request_parser_detects_incomplete_request() {
+        XCTAssertFalse(HTTPRequestParser.isCompleteRequest("POST /goal HTTP/1.1\r\nContent-Length: 5\r\n\r\nhi"))
+        XCTAssertTrue(HTTPRequestParser.isCompleteRequest("POST /goal HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello"))
+    }
+
     func test_http_router_returns_state_payload_for_goal_post() {
         let runtime = makeRuntime()
         let router = HTTPRouter()
         let request = HTTPRequest(
             method: "POST",
-            target: "/goal",
             path: "/goal",
             queryItems: [:],
             headers: [:],
@@ -59,7 +63,6 @@ final class InterfaceContractTests: XCTestCase {
         let router = HTTPRouter()
         let request = HTTPRequest(
             method: "GET",
-            target: "/events?limit=1",
             path: "/events",
             queryItems: ["limit": "1"],
             headers: [:],
@@ -68,10 +71,13 @@ final class InterfaceContractTests: XCTestCase {
 
         let response = router.handle(request, runtime: runtime)
         let decoder = JSONDecoder()
-        let envelopes = try decoder.decode([EventEnvelope].self, from: response.body)
+        let body = try decoder.decode(EventListBody.self, from: response.body)
 
         XCTAssertEqual(response.status, 200)
-        XCTAssertEqual(envelopes.count, 1)
+        XCTAssertEqual(body.count, 1)
+        XCTAssertEqual(body.events.count, 1)
+        XCTAssertTrue(body.events[0].summary.contains("wrote"))
+        XCTAssertTrue(body.events[0].success)
     }
 
     func test_http_router_surfaces_failure_details_for_blocked_goal() {
@@ -79,7 +85,6 @@ final class InterfaceContractTests: XCTestCase {
         let router = HTTPRouter()
         let request = HTTPRequest(
             method: "POST",
-            target: "/goal",
             path: "/goal",
             queryItems: [:],
             headers: [:],
@@ -96,6 +101,51 @@ final class InterfaceContractTests: XCTestCase {
         XCTAssertTrue(body?.contains("\"failureCount\" : 1") ?? false)
     }
 
+    func test_http_router_state_view_includes_summary() throws {
+        let runtime = makeRuntime()
+        _ = try runtime.run(goal: Goal(text: "write file a.txt hello"))
+
+        let router = HTTPRouter()
+        let request = HTTPRequest(
+            method: "GET",
+            path: "/state",
+            queryItems: [:],
+            headers: [:],
+            body: ""
+        )
+
+        let response = router.handle(request, runtime: runtime)
+        let decoder = JSONDecoder()
+        let body = try decoder.decode(StateViewBody.self, from: response.body)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(body.summary.fileCount, 1)
+        XCTAssertEqual(body.summary.failureCount, 0)
+        XCTAssertEqual(body.summary.lastHTTPResponseStatus, 0)
+        XCTAssertEqual(body.state.files["a.txt"], "hello")
+    }
+
+    func test_http_router_event_view_surfaces_failure_summary() throws {
+        let runtime = makeRuntime()
+        _ = try runtime.runResult(goal: Goal(text: "write file ../escape.txt blocked"))
+
+        let router = HTTPRouter()
+        let request = HTTPRequest(
+            method: "GET",
+            path: "/events",
+            queryItems: [:],
+            headers: [:],
+            body: ""
+        )
+
+        let response = router.handle(request, runtime: runtime)
+        let decoder = JSONDecoder()
+        let body = try decoder.decode(EventListBody.self, from: response.body)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertTrue(body.events.contains(where: { !$0.success && $0.summary.contains("workspace root") }))
+    }
+
     private func makeRuntime() -> AgentRuntime {
         AgentRuntime(
             loop: AgentLoop(
@@ -109,4 +159,14 @@ final class InterfaceContractTests: XCTestCase {
             )
         )
     }
+}
+
+private struct EventListBody: Decodable {
+    let count: Int
+    let events: [RuntimeEventSummary]
+}
+
+private struct StateViewBody: Decodable {
+    let summary: RuntimeStateSummary
+    let state: WorldState
 }

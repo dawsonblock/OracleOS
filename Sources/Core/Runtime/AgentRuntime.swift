@@ -25,11 +25,23 @@ public final class AgentRuntime: Sendable {
         try loop.runResult(goal: goal, planner: planner)
     }
 
+    public func runResult(goal: Goal, commands: [Command]) throws -> RuntimeRunResult {
+        try loop.runResult(goal: goal, commands: commands)
+    }
+
     public func currentState() throws -> WorldState {
         try loop.currentState()
     }
 
+    public func currentStateSummary() throws -> RuntimeStateSummary {
+        try RuntimeViewBuilder.stateSummary(from: currentState())
+    }
+
     public func recentEvents(limit: Int = 100) throws -> [EventEnvelope] {
         try loop.recentEvents(limit: limit)
+    }
+
+    public func recentEventSummaries(limit: Int = 100) throws -> [RuntimeEventSummary] {
+        try RuntimeViewBuilder.eventSummaries(from: recentEvents(limit: limit))
     }
 }
