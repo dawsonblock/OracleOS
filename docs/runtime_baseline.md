@@ -38,7 +38,7 @@ Active enforcement + contract suite under `Tests/ArchitectureEnforcement/`:
 |--------|-------|
 | Test files | 10 |
 | Support files | 1 |
-| Test methods | 30 |
+| Test methods | 32 |
 
 ## Hygiene Status
 
@@ -48,3 +48,4 @@ Active enforcement + contract suite under `Tests/ArchitectureEnforcement/`:
 - Legacy package sources and tests were quarantined under `Legacy/`
 - Active runtime code now lives only under `Sources/Core`, `Sources/Interface`, `Sources/MultiAgent`, and `Sources/App`
 - Active executor policy now enforces workspace-bounded file commands and bounded shell/HTTP timeouts
+- Failure and timeout outcomes are now emitted as structured runtime events and surfaced in runtime state / HTTP goal responses

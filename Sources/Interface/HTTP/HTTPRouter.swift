@@ -20,13 +20,16 @@ public struct HTTPRouter {
     private func runGoal(_ request: HTTPRequest, runtime: AgentRuntime) -> HTTPResponse {
         do {
             let goalText = request.body.trimmingCharacters(in: .whitespacesAndNewlines)
-            let state = try runtime.run(goal: Goal(text: goalText))
+            let result = try runtime.runResult(goal: Goal(text: goalText))
             let payload = GoalRunResponse(
-                status: "ok",
+                status: result.success ? "ok" : "degraded",
+                success: result.success,
                 goal: goalText,
-                commandCount: state.executedCommandIDs.count,
-                traceCount: state.executionTrace.count,
-                state: state
+                commandCount: result.state.executedCommandIDs.count,
+                traceCount: result.state.executionTrace.count,
+                emittedEventCount: result.emittedEventCount,
+                issues: result.issues,
+                state: result.state
             )
             return json(status: 200, payload)
         } catch {
@@ -75,8 +78,11 @@ public struct HTTPRouter {
 
 private struct GoalRunResponse: Encodable {
     let status: String
+    let success: Bool
     let goal: String
     let commandCount: Int
     let traceCount: Int
+    let emittedEventCount: Int
+    let issues: [String]
     let state: WorldState
 }

@@ -23,6 +23,15 @@ public struct BasicCritic: Critic {
         let goalText = goal.text.lowercased()
         let shellEvents = events.compactMap { $0 as? ShellExecutedEvent }
         let httpEvents = events.compactMap { $0 as? HTTPResponseEvent }
+        let failureEvents = events.compactMap { $0 as? CommandFailedEvent }
+
+        if let failure = failureEvents.last, shellEvents.isEmpty, httpEvents.isEmpty, state.files.isEmpty {
+            return Evaluation(
+                success: false,
+                score: 0.0,
+                issues: [failure.reason]
+            )
+        }
 
         if goalText.hasPrefix("write file ") {
             let path = goalPath(from: goal.text, prefix: "write file ")
@@ -30,7 +39,7 @@ public struct BasicCritic: Critic {
             return Evaluation(
                 success: success,
                 score: success ? 1.0 : 0.0,
-                issues: success ? [] : ["Expected file write did not reach reducer state for \(path)."]
+                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file write did not reach reducer state for \(path)." : state.lastFailure]
             )
         }
 
@@ -40,7 +49,7 @@ public struct BasicCritic: Critic {
             return Evaluation(
                 success: success,
                 score: success ? 1.0 : 0.0,
-                issues: success ? [] : ["Expected file delete did not reach reducer state for \(path)."]
+                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file delete did not reach reducer state for \(path)." : state.lastFailure]
             )
         }
 
@@ -49,7 +58,7 @@ public struct BasicCritic: Critic {
             return Evaluation(
                 success: success,
                 score: success ? 0.9 : 0.1,
-                issues: success ? [] : ["Shell goal did not complete successfully."]
+                issues: success ? [] : [failureEvents.last?.reason ?? "Shell goal did not complete successfully."]
             )
         }
 
@@ -58,7 +67,7 @@ public struct BasicCritic: Critic {
             return Evaluation(
                 success: success,
                 score: success ? 0.9 : 0.1,
-                issues: success ? [] : ["HTTP goal did not produce a valid response event."]
+                issues: success ? [] : [failureEvents.last?.reason ?? "HTTP goal did not produce a valid response event."]
             )
         }
 

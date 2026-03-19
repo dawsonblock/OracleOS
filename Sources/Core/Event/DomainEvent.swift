@@ -106,3 +106,29 @@ public struct HTTPResponseEvent: DomainEvent, Equatable {
         self.durationMillis = durationMillis
     }
 }
+
+public struct CommandFailedEvent: DomainEvent, Equatable {
+    public static let eventType = "command.failed"
+
+    public let id: UUID
+    public let commandID: UUID
+    public let commandType: String
+    public let reason: String
+    public let timedOut: Bool
+
+    public var type: String { Self.eventType }
+
+    public init(
+        id: UUID = UUID(),
+        commandID: UUID,
+        commandType: String,
+        reason: String,
+        timedOut: Bool
+    ) {
+        self.id = id
+        self.commandID = commandID
+        self.commandType = commandType
+        self.reason = reason
+        self.timedOut = timedOut
+    }
+}

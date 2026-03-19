@@ -70,4 +70,37 @@ final class RuntimeContractTests: XCTestCase {
             )
         }
     }
+
+    func test_runtime_run_result_surfaces_failed_command_state() throws {
+        let runtime = AgentRuntime(
+            loop: AgentLoop(
+                planner: FixedPlanner(commands: [
+                    Command(type: "file.write", payload: ["path": "../escape.txt", "content": "blocked"]),
+                ]),
+                resolver: CommandResolver(),
+                executor: VerifiedExecutor(policy: PolicyEngine()),
+                store: InMemoryEventStore(),
+                reducer: DefaultReducer(),
+                critic: BasicCritic(),
+                repair: RepairEngine()
+            )
+        )
+
+        let result = try runtime.runResult(goal: Goal(text: "write file ../escape.txt blocked"))
+
+        XCTAssertFalse(result.success)
+        XCTAssertEqual(result.state.failureCount, 1)
+        XCTAssertEqual(result.state.lastFailedCommandType, "file.write")
+        XCTAssertEqual(result.state.lastFailure, "File commands must stay within the workspace root")
+        XCTAssertFalse(result.state.lastFailureTimedOut)
+        XCTAssertTrue(result.issues.contains("File commands must stay within the workspace root"))
+    }
+}
+
+private struct FixedPlanner: Planner {
+    let commands: [Command]
+
+    func plan(goal: Goal, state: WorldState) -> [Command] {
+        commands
+    }
 }

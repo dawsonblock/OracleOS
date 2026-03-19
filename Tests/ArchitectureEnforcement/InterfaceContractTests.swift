@@ -46,6 +46,7 @@ final class InterfaceContractTests: XCTestCase {
 
         XCTAssertEqual(response.status, 200)
         XCTAssertEqual(response.contentType, "application/json")
+        XCTAssertTrue(body?.contains("\"success\" : true") ?? false)
         XCTAssertTrue(body?.contains("\"goal\" : \"write file a.txt hello\"") ?? false)
         XCTAssertTrue(body?.contains("\"a.txt\"") ?? false)
     }
@@ -71,6 +72,28 @@ final class InterfaceContractTests: XCTestCase {
 
         XCTAssertEqual(response.status, 200)
         XCTAssertEqual(envelopes.count, 1)
+    }
+
+    func test_http_router_surfaces_failure_details_for_blocked_goal() {
+        let runtime = makeRuntime()
+        let router = HTTPRouter()
+        let request = HTTPRequest(
+            method: "POST",
+            target: "/goal",
+            path: "/goal",
+            queryItems: [:],
+            headers: [:],
+            body: "write file ../escape.txt blocked"
+        )
+
+        let response = router.handle(request, runtime: runtime)
+        let body = String(data: response.body, encoding: .utf8)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertTrue(body?.contains("\"status\" : \"degraded\"") ?? false)
+        XCTAssertTrue(body?.contains("\"success\" : false") ?? false)
+        XCTAssertTrue(body?.contains("File commands must stay within the workspace root") ?? false)
+        XCTAssertTrue(body?.contains("\"failureCount\" : 1") ?? false)
     }
 
     private func makeRuntime() -> AgentRuntime {

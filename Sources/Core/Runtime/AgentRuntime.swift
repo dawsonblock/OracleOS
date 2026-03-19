@@ -17,6 +17,14 @@ public final class AgentRuntime: Sendable {
         try loop.run(goal: goal, planner: planner)
     }
 
+    public func runResult(goal: Goal) throws -> RuntimeRunResult {
+        try loop.runResult(goal: goal)
+    }
+
+    public func runResult(goal: Goal, planner: any Planner) throws -> RuntimeRunResult {
+        try loop.runResult(goal: goal, planner: planner)
+    }
+
     public func currentState() throws -> WorldState {
         try loop.currentState()
     }

@@ -13,6 +13,8 @@ public enum DomainEventCodec {
             return try encoder.encode(event)
         case let event as HTTPResponseEvent:
             return try encoder.encode(event)
+        case let event as CommandFailedEvent:
+            return try encoder.encode(event)
         default:
             throw RuntimeError.unknownEvent(String(describing: type(of: event)))
         }
@@ -30,6 +32,8 @@ public enum DomainEventCodec {
             return try decoder.decode(FileDeleteRequestedEvent.self, from: data)
         case HTTPResponseEvent.eventType:
             return try decoder.decode(HTTPResponseEvent.self, from: data)
+        case CommandFailedEvent.eventType:
+            return try decoder.decode(CommandFailedEvent.self, from: data)
         default:
             throw RuntimeError.unknownEvent(type)
         }

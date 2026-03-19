@@ -31,40 +31,79 @@ public final class AgentLoop: Sendable {
     }
 
     public func run(goal: Goal) throws -> WorldState {
-        try run(goal: goal, planner: planner)
+        try runResult(goal: goal, planner: planner).state
     }
 
     public func run(goal: Goal, planner: any Planner) throws -> WorldState {
+        try runResult(goal: goal, planner: planner).state
+    }
+
+    public func runResult(goal: Goal) throws -> RuntimeRunResult {
+        try runResult(goal: goal, planner: planner)
+    }
+
+    public func runResult(goal: Goal, planner: any Planner) throws -> RuntimeRunResult {
         var state = try currentState()
         var commands = resolver.normalize(planner.plan(goal: goal, state: state))
+        var emittedEventCount = 0
 
         guard !commands.isEmpty else {
-            return state
+            return RuntimeRunResult(state: state, success: false, issues: ["Planner returned no commands."], emittedEventCount: 0)
         }
 
         for _ in 0..<maxIterations {
             var cycleEvents: [any DomainEvent] = []
 
             for command in commands {
-                let events = try executor.execute(command)
+                let events: [any DomainEvent]
+                do {
+                    events = try executor.execute(command)
+                } catch {
+                    let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+                    events = [
+                        CommandFailedEvent(
+                            commandID: command.id,
+                            commandType: command.type,
+                            reason: message,
+                            timedOut: isTimeoutError(error)
+                        ),
+                    ]
+                }
                 try store.append(events)
                 cycleEvents.append(contentsOf: events)
             }
 
+            emittedEventCount += cycleEvents.count
             state = reducer.apply(cycleEvents, to: state)
             let evaluation = critic.evaluate(goal: goal, events: cycleEvents, state: state)
 
             if evaluation.success {
-                return state
+                return RuntimeRunResult(
+                    state: state,
+                    success: true,
+                    issues: [],
+                    emittedEventCount: emittedEventCount
+                )
             }
 
             commands = resolver.normalize(repair.proposeFixes(evaluation: evaluation))
             if commands.isEmpty {
-                return state
+                return RuntimeRunResult(
+                    state: state,
+                    success: false,
+                    issues: evaluation.issues,
+                    emittedEventCount: emittedEventCount
+                )
             }
         }
 
-        return state
+        let finalEvaluation = critic.evaluate(goal: goal, events: [], state: state)
+        return RuntimeRunResult(
+            state: state,
+            success: finalEvaluation.success,
+            issues: finalEvaluation.issues,
+            emittedEventCount: emittedEventCount
+        )
     }
 
     public func currentState() throws -> WorldState {
@@ -74,5 +113,13 @@ public final class AgentLoop: Sendable {
     public func recentEvents(limit: Int = 100) throws -> [EventEnvelope] {
         let events = try store.load()
         return Array(events.suffix(limit))
+    }
+
+    private func isTimeoutError(_ error: Error) -> Bool {
+        if let runtimeError = error as? RuntimeError,
+           case .executionTimedOut = runtimeError {
+            return true
+        }
+        return false
     }
 }

@@ -24,6 +24,12 @@ public struct DefaultReducer: Reducer {
             case let event as HTTPResponseEvent:
                 newState.lastHTTPResponseSize = event.size
                 newState.executionTrace.append("\(event.type)#\(event.commandID.uuidString)")
+            case let event as CommandFailedEvent:
+                newState.failureCount += 1
+                newState.lastFailure = event.reason
+                newState.lastFailedCommandType = event.commandType
+                newState.lastFailureTimedOut = event.timedOut
+                newState.executionTrace.append("\(event.type)#\(event.commandID.uuidString)")
             default:
                 continue
             }
