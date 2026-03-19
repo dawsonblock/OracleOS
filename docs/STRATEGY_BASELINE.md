@@ -20,11 +20,11 @@ These metrics should be captured before and after the strategy-top-level-upgrade
 
 ## How to Capture
 
-Run the eval set and populate the table above. Optionally save raw data to `Diagnostics/strategy_baseline.json`.
+Run the eval set and populate the table above. Optionally save raw data to `Observability/Diagnostics/strategy_baseline.json`.
 
 ```bash
 # Example: run tests and capture strategy diagnostics
-swift test --filter "Strategy" 2>&1 | tee Diagnostics/strategy_test_output.txt
+swift test --filter "Strategy" 2>&1 | tee Observability/Diagnostics/strategy_test_output.txt
 ```
 
 ## What Changed

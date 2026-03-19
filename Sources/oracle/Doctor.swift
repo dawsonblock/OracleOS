@@ -376,23 +376,13 @@ struct Doctor {
     }
 
     private func runShell(_ command: String) -> ShellResult {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
-        process.standardOutput = pipe
-        process.standardError = pipe
-        var env = ProcessInfo.processInfo.environment
-        env.removeValue(forKey: "CLAUDE_CODE")
-        env.removeValue(forKey: "CLAUDECODE")
-        process.environment = env
-
         do {
-            try process.run()
-            // Read pipe BEFORE waitUntilExit to avoid deadlock if output exceeds pipe buffer
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return ShellResult(output: String(data: data, encoding: .utf8) ?? "", exitCode: process.terminationStatus)
+            let result = try VerifiedExecutor.runSubprocess(
+                executable: "/bin/zsh",
+                arguments: ["-c", command],
+                environment: VerifiedExecutor.sanitizedEnvironment(removing: ["CLAUDE_CODE", "CLAUDECODE"])
+            )
+            return ShellResult(output: result.combinedOutput, exitCode: result.exitCode)
         } catch {
             return ShellResult(output: "", exitCode: -1)
         }

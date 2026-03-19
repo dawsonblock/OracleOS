@@ -90,16 +90,15 @@ actor HostProcessClient {
         let outputPipe = Pipe()
         let errorPipe = Pipe()
 
-        let process = Process()
-        process.executableURL = hostURL
-        process.currentDirectoryURL = OracleProductPaths.runningFromAppBundle
-            ? OracleProductPaths.dataRootDirectory
-            : URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
-        process.standardInput = inputPipe
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        try process.run()
+        let process = try VerifiedExecutor.spawnSubprocess(
+            executable: hostURL.path,
+            currentDirectoryURL: OracleProductPaths.runningFromAppBundle
+                ? OracleProductPaths.dataRootDirectory
+                : URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true),
+            standardInput: inputPipe,
+            standardOutput: outputPipe,
+            standardError: errorPipe
+        )
 
         self.process = process
         self.stdinHandle = inputPipe.fileHandleForWriting

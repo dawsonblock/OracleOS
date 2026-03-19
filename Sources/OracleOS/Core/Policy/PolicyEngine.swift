@@ -94,6 +94,31 @@ public final class PolicyEngine: @unchecked Sendable {
         }
     }
 
+    public func validate(_ command: Command) throws {
+        switch command.type {
+        case "shell":
+            guard let cmd = command.payload["cmd"], !cmd.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw RuntimeError.invalidPayload
+            }
+        case "file.write":
+            guard command.payload["path"] != nil, command.payload["content"] != nil else {
+                throw RuntimeError.invalidPayload
+            }
+        case "file.delete":
+            guard let path = command.payload["path"], !path.isEmpty else {
+                throw RuntimeError.invalidPayload
+            }
+        case "http.request":
+            guard let url = command.payload["url"],
+                  url.hasPrefix("http://") || url.hasPrefix("https://")
+            else {
+                throw RuntimeError.policyViolation("HTTP requests require an explicit http(s) URL")
+            }
+        default:
+            throw RuntimeError.unknownCommand(command.type)
+        }
+    }
+
     public static func defaultMode() -> PolicyMode {
         guard let raw = ProcessInfo.processInfo.environment["ORACLE_OS_POLICY_MODE"] else {
             return .confirmRisky

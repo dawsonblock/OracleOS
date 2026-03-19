@@ -746,25 +746,13 @@ struct SetupWizard {
     }
 
     private func runShell(_ command: String) -> ShellResult {
-        let process = Process()
-        let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
-        process.standardOutput = pipe
-        process.standardError = pipe
-        // Unset CLAUDECODE to avoid nested session error
-        var env = ProcessInfo.processInfo.environment
-        env.removeValue(forKey: "CLAUDE_CODE")
-        env.removeValue(forKey: "CLAUDECODE")
-        process.environment = env
-
         do {
-            try process.run()
-            // Read pipe BEFORE waitUntilExit to avoid deadlock if output exceeds pipe buffer
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let output = String(data: data, encoding: .utf8) ?? ""
-            return ShellResult(output: output, exitCode: process.terminationStatus)
+            let result = try VerifiedExecutor.runSubprocess(
+                executable: "/bin/zsh",
+                arguments: ["-c", command],
+                environment: VerifiedExecutor.sanitizedEnvironment(removing: ["CLAUDE_CODE", "CLAUDECODE"])
+            )
+            return ShellResult(output: result.combinedOutput, exitCode: result.exitCode)
         } catch {
             return ShellResult(output: "", exitCode: -1)
         }
@@ -773,19 +761,14 @@ struct SetupWizard {
     /// Run a command with live stdout/stderr output (for progress display).
     /// Returns the exit code.
     private func runShellLive(_ executable: String, args: [String]) -> Int32 {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = args
-        // Inherit stdout/stderr so the user sees download progress
-        process.standardOutput = FileHandle.standardOutput
-        process.standardError = FileHandle.standardError
-        var env = ProcessInfo.processInfo.environment
-        env.removeValue(forKey: "CLAUDE_CODE")
-        env.removeValue(forKey: "CLAUDECODE")
-        process.environment = env
-
         do {
-            try process.run()
+            let process = try VerifiedExecutor.spawnSubprocess(
+                executable: executable,
+                arguments: args,
+                environment: VerifiedExecutor.sanitizedEnvironment(removing: ["CLAUDE_CODE", "CLAUDECODE"]),
+                standardOutput: FileHandle.standardOutput,
+                standardError: FileHandle.standardError
+            )
             process.waitUntilExit()
             return process.terminationStatus
         } catch {

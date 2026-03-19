@@ -170,7 +170,7 @@ public enum OracleProductPaths {
         }
 
         if let developerRoot = developerProjectRoot {
-            let bundled = developerRoot.appendingPathComponent("vision-sidecar", isDirectory: true)
+            let bundled = developerRoot.appendingPathComponent("Infra/Sidecars/vision-sidecar", isDirectory: true)
             if FileManager.default.fileExists(atPath: bundled.path) {
                 return bundled
             }

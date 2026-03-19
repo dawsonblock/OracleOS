@@ -63,39 +63,30 @@ public struct WorktreeSandbox: Codable, Sendable, Equatable {
 }
 
 private func runGit(arguments: [String], workspaceRoot: URL) throws {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["git"] + arguments
-    process.currentDirectoryURL = workspaceRoot
-    let stderr = Pipe()
-    process.standardError = stderr
-    process.standardOutput = Pipe()
-    try process.run()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else {
-        let message = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "git worktree failed"
-        throw NSError(domain: "WorktreeSandbox", code: Int(process.terminationStatus), userInfo: [
+    let result = try VerifiedExecutor.runSubprocess(
+        executable: "/usr/bin/env",
+        arguments: ["git"] + arguments,
+        currentDirectoryURL: workspaceRoot
+    )
+    guard result.exitCode == 0 else {
+        let message = result.combinedOutput.isEmpty ? "git worktree failed" : result.combinedOutput
+        throw NSError(domain: "WorktreeSandbox", code: Int(result.exitCode), userInfo: [
             NSLocalizedDescriptionKey: message.trimmingCharacters(in: .whitespacesAndNewlines),
         ])
     }
 }
 
 private func runGitOutput(arguments: [String], workspaceRoot: URL) throws -> String {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-    process.arguments = ["git"] + arguments
-    process.currentDirectoryURL = workspaceRoot
-    let stdout = Pipe()
-    let stderr = Pipe()
-    process.standardOutput = stdout
-    process.standardError = stderr
-    try process.run()
-    process.waitUntilExit()
-    guard process.terminationStatus == 0 else {
-        let message = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "git worktree failed"
-        throw NSError(domain: "WorktreeSandbox", code: Int(process.terminationStatus), userInfo: [
+    let result = try VerifiedExecutor.runSubprocess(
+        executable: "/usr/bin/env",
+        arguments: ["git"] + arguments,
+        currentDirectoryURL: workspaceRoot
+    )
+    guard result.exitCode == 0 else {
+        let message = result.combinedOutput.isEmpty ? "git worktree failed" : result.combinedOutput
+        throw NSError(domain: "WorktreeSandbox", code: Int(result.exitCode), userInfo: [
             NSLocalizedDescriptionKey: message.trimmingCharacters(in: .whitespacesAndNewlines),
         ])
     }
-    return String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    return result.stdout
 }

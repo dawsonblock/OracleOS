@@ -57,30 +57,11 @@ public enum CDPBridge {
         var request = URLRequest(url: url, timeoutInterval: httpTimeout)
         request.httpMethod = "GET"
 
-        nonisolated final class Box: @unchecked Sendable {
-            var data: Data?
-            var error: (any Error)?
-        }
-        let box = Box()
-        let semaphore = DispatchSemaphore(value: 0)
-
-        let session = URLSession(configuration: .default)
-        let task = session.dataTask(with: request) { data, _, error in
-            box.data = data
-            box.error = error
-            semaphore.signal()
-        }
-        task.resume()
-        semaphore.wait()
-
-        guard box.error == nil,
-              let data = box.data,
-              let targets = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else {
+        do {
+            return try VerifiedExecutor.performJSONRequest(request) as? [[String: Any]]
+        } catch {
             return nil
         }
-
-        return targets
     }
 
     // MARK: - Element Finding via JavaScript
@@ -298,11 +279,6 @@ public enum CDPBridge {
     ) -> [[String: Any]]? {
         guard let url = URL(string: wsURL) else { return nil }
 
-        let session = URLSession(configuration: .default)
-        let wsTask = session.webSocketTask(with: url)
-        wsTask.resume()
-
-        // Send Runtime.evaluate command
         let command: [String: Any] = [
             "id": 1,
             "method": "Runtime.evaluate",
@@ -315,58 +291,28 @@ public enum CDPBridge {
         guard let commandData = try? JSONSerialization.data(withJSONObject: command),
               let commandString = String(data: commandData, encoding: .utf8)
         else {
-            wsTask.cancel(with: .goingAway, reason: nil)
             return nil
         }
 
-        nonisolated final class ResultBox: @unchecked Sendable {
-            var result: [[String: Any]]?
-            var error: (any Error)?
-        }
-        let box = ResultBox()
-        let semaphore = DispatchSemaphore(value: 0)
-
-        // Send command
-        wsTask.send(.string(commandString)) { error in
-            if let error {
-                box.error = error
-                semaphore.signal()
-                return
+        do {
+            let responseText = try VerifiedExecutor.receiveWebSocketText(
+                url: url,
+                sending: commandString,
+                timeout: wsTimeout
+            )
+            guard let data = responseText.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let resultObj = json["result"] as? [String: Any],
+                  let resultValue = resultObj["result"] as? [String: Any],
+                  let value = resultValue["value"] as? [[String: Any]]
+            else {
+                return nil
             }
-
-            // Read response
-            wsTask.receive { result in
-                switch result {
-                case .success(let message):
-                    switch message {
-                    case .string(let text):
-                        if let data = text.data(using: .utf8),
-                           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                           let resultObj = json["result"] as? [String: Any],
-                           let resultValue = resultObj["result"] as? [String: Any],
-                           let value = resultValue["value"] as? [[String: Any]]
-                        {
-                            box.result = value
-                        }
-                    default:
-                        break
-                    }
-                case .failure(let error):
-                    box.error = error
-                }
-                semaphore.signal()
-            }
-        }
-
-        let waitResult = semaphore.wait(timeout: .now() + wsTimeout)
-        wsTask.cancel(with: .goingAway, reason: nil)
-
-        if waitResult == .timedOut {
-            Log.warn("CDP: WebSocket timeout after \(wsTimeout)s")
+            return value
+        } catch {
+            Log.warn("CDP: WebSocket error: \(error.localizedDescription)")
             return nil
         }
-
-        return box.result
     }
 
     /// Evaluate JavaScript and return the raw string value from the result.
@@ -378,10 +324,6 @@ public enum CDPBridge {
     ) -> String? {
         guard let url = URL(string: wsURL) else { return nil }
 
-        let session = URLSession(configuration: .default)
-        let wsTask = session.webSocketTask(with: url)
-        wsTask.resume()
-
         let command: [String: Any] = [
             "id": 1,
             "method": "Runtime.evaluate",
@@ -394,67 +336,39 @@ public enum CDPBridge {
         guard let commandData = try? JSONSerialization.data(withJSONObject: command),
               let commandString = String(data: commandData, encoding: .utf8)
         else {
-            wsTask.cancel(with: .goingAway, reason: nil)
             return nil
         }
 
-        nonisolated final class StringBox: @unchecked Sendable {
-            var result: String?
-            var error: (any Error)?
-        }
-        let box = StringBox()
-        let semaphore = DispatchSemaphore(value: 0)
-
-        wsTask.send(.string(commandString)) { error in
-            if let error {
-                box.error = error
-                semaphore.signal()
-                return
+        do {
+            let responseText = try VerifiedExecutor.receiveWebSocketText(
+                url: url,
+                sending: commandString,
+                timeout: wsTimeout
+            )
+            guard let data = responseText.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let resultObj = json["result"] as? [String: Any]
+            else {
+                return nil
             }
-            wsTask.receive { result in
-                switch result {
-                case .success(let message):
-                    switch message {
-                    case .string(let text):
-                        if let data = text.data(using: .utf8),
-                           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                           let resultObj = json["result"] as? [String: Any] {
 
-                            // If CDP reports an exception, treat this as an error and do not set a result.
-                            if let exceptionDetails = resultObj["exceptionDetails"] as? [String: Any] {
-                                let error = NSError(
-                                    domain: "CDPBridge.RuntimeEvaluate",
-                                    code: 1,
-                                    userInfo: ["exceptionDetails": exceptionDetails]
-                                )
-                                box.error = error
-                            } else if let resultValue = resultObj["result"] as? [String: Any] {
-                                let value = resultValue["value"]
-
-                                // CDP represents JS `null` as NSNull; treat that as no result (`nil`), not the string "<null>".
-                                if let value, !(value is NSNull) {
-                                    box.result = "\(value)"
-                                }
-                            }
-                        }
-                    default:
-                        break
-                    }
-                case .failure(let error):
-                    box.error = error
-                }
-                semaphore.signal()
+            if let exceptionDetails = resultObj["exceptionDetails"] as? [String: Any] {
+                fputs("CDPBridge.evaluateJSRaw: Runtime exception: \(exceptionDetails)\n", stderr)
+                return nil
             }
-        }
 
-        let waitResult = semaphore.wait(timeout: .now() + wsTimeout)
-        wsTask.cancel(with: .goingAway, reason: nil)
+            if let resultValue = resultObj["result"] as? [String: Any],
+               let value = resultValue["value"],
+               !(value is NSNull)
+            {
+                return "\(value)"
+            }
 
-        if waitResult == .timedOut {
-            fputs("CDPBridge.evaluateJSRaw: WebSocket command timed out after \(wsTimeout)s\n", stderr)
+            return nil
+        } catch {
+            fputs("CDPBridge.evaluateJSRaw: \(error.localizedDescription)\n", stderr)
             return nil
         }
-        return box.result
     }
 
     // MARK: - Helpers

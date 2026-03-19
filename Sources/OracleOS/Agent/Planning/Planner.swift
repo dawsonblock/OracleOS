@@ -215,6 +215,33 @@ public class Planner {
         nextStep(worldState: worldState, graphStore: graphStore, selectedStrategy: selectedStrategy)?.actionContract
     }
 
+    public func plan(goal: Goal, state: WorldState) -> [Command] {
+        let normalized = goal.description.lowercased()
+        var commands: [Command] = []
+
+        if normalized.contains("build") {
+            commands.append(Command(type: "shell", payload: ["cmd": "swift build"]))
+        }
+
+        if normalized.contains("test") {
+            commands.append(Command(type: "shell", payload: ["cmd": "swift test"]))
+        }
+
+        if commands.isEmpty, state.files.isEmpty {
+            commands.append(
+                Command(
+                    type: "file.write",
+                    payload: [
+                        "path": "runtime-goal.log",
+                        "content": goal.description,
+                    ]
+                )
+            )
+        }
+
+        return commands
+    }
+
     public func plan(goal: String) -> Plan {
         let interpretedGoal = interpretGoal(goal)
         setGoal(interpretedGoal)

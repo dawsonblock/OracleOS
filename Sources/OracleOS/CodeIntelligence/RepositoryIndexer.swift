@@ -667,37 +667,27 @@ public final class RepositoryIndexer: @unchecked Sendable {
     }
 
     private func currentBranch(workspaceRoot: URL) -> String? {
-        let process = Process()
-        let stdout = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["git", "branch", "--show-current"]
-        process.currentDirectoryURL = workspaceRoot
-        process.standardOutput = stdout
-        process.standardError = Pipe()
         do {
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return nil }
-            return String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let result = try VerifiedExecutor.runSubprocess(
+                executable: "/usr/bin/env",
+                arguments: ["git", "branch", "--show-current"],
+                currentDirectoryURL: workspaceRoot
+            )
+            guard result.exitCode == 0 else { return nil }
+            return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         } catch {
             return nil
         }
     }
 
     private func gitDirty(workspaceRoot: URL) -> Bool {
-        let process = Process()
-        let stdout = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["git", "status", "--porcelain"]
-        process.currentDirectoryURL = workspaceRoot
-        process.standardOutput = stdout
-        process.standardError = Pipe()
         do {
-            try process.run()
-            process.waitUntilExit()
-            let output = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            return !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let result = try VerifiedExecutor.runSubprocess(
+                executable: "/usr/bin/env",
+                arguments: ["git", "status", "--porcelain"],
+                currentDirectoryURL: workspaceRoot
+            )
+            return !result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         } catch {
             return false
         }

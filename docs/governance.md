@@ -176,7 +176,7 @@ These should produce governance findings and controller visibility:
 ### Canonical stores
 
 - stable/candidate graph in SQLite
-- canonical project memory in repo-local `ProjectMemory/`
+- canonical project memory in repo-local `Observability/Memory/`
 
 ### Non-canonical stores
 

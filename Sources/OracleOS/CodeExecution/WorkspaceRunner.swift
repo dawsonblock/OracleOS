@@ -51,29 +51,19 @@ public final class WorkspaceRunner: @unchecked Sendable {
         let scope = try WorkspaceScope(rootURL: URL(fileURLWithPath: spec.workspaceRoot, isDirectory: true))
         _ = try scope.resolve(relativePath: spec.workspaceRelativePath)
 
-        let start = Date()
-        let process = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.executableURL = URL(fileURLWithPath: spec.executable)
-        process.arguments = spec.arguments
-        process.currentDirectoryURL = scope.rootURL
-        process.standardOutput = stdout
-        process.standardError = stderr
-        process.environment = sanitizedEnvironment()
-
-        try process.run()
-        process.waitUntilExit()
-
-        let outData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let errData = stderr.fileHandleForReading.readDataToEndOfFile()
+        let result = try VerifiedExecutor.runSubprocess(
+            executable: spec.executable,
+            arguments: spec.arguments,
+            currentDirectoryURL: scope.rootURL,
+            environment: sanitizedEnvironment()
+        )
 
         return CommandResult(
-            succeeded: process.terminationStatus == 0,
-            exitCode: process.terminationStatus,
-            stdout: String(data: outData, encoding: .utf8) ?? "",
-            stderr: String(data: errData, encoding: .utf8) ?? "",
-            elapsedMs: Date().timeIntervalSince(start) * 1000.0,
+            succeeded: result.exitCode == 0,
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            elapsedMs: result.durationMs,
             workspaceRoot: spec.workspaceRoot,
             category: spec.category,
             summary: spec.summary

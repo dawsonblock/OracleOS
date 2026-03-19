@@ -250,14 +250,13 @@ public enum VisionBridge {
         // Strategy 1: Use oracle-vision launcher script (handles venv/Python resolution)
         if let launcher = findOracleVisionBinary() {
             Log.info("Starting vision sidecar via \(launcher)")
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: launcher)
-            process.arguments = ["--idle-timeout", "600"]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.standardError
-
             do {
-                try process.run()
+                let process = try VerifiedExecutor.spawnSubprocess(
+                    executable: launcher,
+                    arguments: ["--idle-timeout", "600"],
+                    standardOutput: FileHandle.nullDevice,
+                    standardError: FileHandle.standardError
+                )
                 lifecycle.process = process
             } catch {
                 Log.error("Failed to start vision sidecar via launcher: \(error)")
@@ -267,7 +266,9 @@ public enum VisionBridge {
 
             if waitForSidecar() {
                 lifecycle.state = .ready
-                Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                if let process = lifecycle.process {
+                    Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                }
                 return true
             }
             lifecycle.state = .failed
@@ -285,14 +286,13 @@ public enum VisionBridge {
                 return false
             }
 
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: python)
-            process.arguments = [script, "--idle-timeout", "600"]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.standardError
-
             do {
-                try process.run()
+                let process = try VerifiedExecutor.spawnSubprocess(
+                    executable: python,
+                    arguments: [script, "--idle-timeout", "600"],
+                    standardOutput: FileHandle.nullDevice,
+                    standardError: FileHandle.standardError
+                )
                 lifecycle.process = process
             } catch {
                 Log.error("Failed to start vision sidecar: \(error)")
@@ -302,7 +302,9 @@ public enum VisionBridge {
 
             if waitForSidecar() {
                 lifecycle.state = .ready
-                Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                if let process = lifecycle.process {
+                    Log.info("Vision sidecar started (PID \(process.processIdentifier))")
+                }
                 return true
             }
             lifecycle.state = .failed
@@ -336,7 +338,7 @@ public enum VisionBridge {
             "/opt/homebrew/bin/oracle-vision",
             "/usr/local/bin/oracle-vision",
             executableDirectory + "/oracle-vision",
-            executableDirectory + "/../vision-sidecar/oracle-vision",
+            executableDirectory + "/../Infra/Sidecars/vision-sidecar/oracle-vision",
         ].compactMap { $0 }
 
         for path in candidates {
@@ -356,9 +358,9 @@ public enum VisionBridge {
             bundledVisionDirectory?.appendingPathComponent("server.py", isDirectory: false).path,
             "/opt/homebrew/share/oracle-os/vision-sidecar/server.py",
             "/usr/local/share/oracle-os/vision-sidecar/server.py",
-            executableDirectory + "/vision-sidecar/server.py",
-            (executableDirectory as NSString).deletingLastPathComponent + "/vision-sidecar/server.py",
-            ((executableDirectory as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent + "/vision-sidecar/server.py",
+            executableDirectory + "/Infra/Sidecars/vision-sidecar/server.py",
+            (executableDirectory as NSString).deletingLastPathComponent + "/Infra/Sidecars/vision-sidecar/server.py",
+            ((executableDirectory as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent + "/Infra/Sidecars/vision-sidecar/server.py",
         ].compactMap { $0 }
 
         for path in candidates {
@@ -450,32 +452,10 @@ public enum VisionBridge {
         return performRequest(request)
     }
 
-    /// Perform a synchronous URLSession request. Blocks the calling thread
-    /// using a semaphore (acceptable since MCP server is single-threaded).
     private static func performRequest(_ request: URLRequest) -> [String: Any]? {
-        let semaphore = DispatchSemaphore(value: 0)
-
-        // Use nonisolated Sendable box to shuttle data across the closure boundary.
-        // The class must be nonisolated to escape @MainActor default isolation,
-        // since the URLSession completion handler runs on a background thread.
-        nonisolated final class ResponseBox: @unchecked Sendable {
-            var data: Data?
-            var error: (any Error)?
-        }
-        let box = ResponseBox()
-
-        // Use a detached session to avoid MainActor issues
-        let session = URLSession(configuration: .default)
-        let task = session.dataTask(with: request) { data, _, error in
-            box.data = data
-            box.error = error
-            semaphore.signal()
-        }
-        task.resume()
-        semaphore.wait()
-
-        if let error = box.error {
-            // Don't log connection refused as error — sidecar might not be running
+        do {
+            return try VerifiedExecutor.performJSONRequest(request) as? [String: Any]
+        } catch {
             let nsError = error as NSError
             if nsError.code == NSURLErrorCannotConnectToHost ||
                nsError.code == NSURLErrorTimedOut ||
@@ -487,13 +467,5 @@ public enum VisionBridge {
             }
             return nil
         }
-
-        guard let data = box.data,
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else {
-            return nil
-        }
-
-        return json
     }
 }
