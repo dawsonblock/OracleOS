@@ -6,10 +6,6 @@
 .swiftpm/
 *.xcodeproj/
 *.xcworkspace/
-!OracleController.xcworkspace/
-!OracleController.xcworkspace/**
-!OracleController.xcodeproj/
-!OracleController.xcodeproj/**
 DerivedData/
 *.o
 *.dylib
@@ -39,3 +35,7 @@ ghost-os-*.tar.gz
 local/
 .oracle-graph/
 dist/
+Observability/runtime/
+repair.log
+runtime-goal.log
+runtime-followup.log
