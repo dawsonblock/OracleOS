@@ -14,6 +14,8 @@ public struct RuntimeStateSummary: Codable, Sendable, Equatable {
     public let lastHTTPResponseSize: Int
     public let lastOutputPreview: String
     public let lastTraceEntry: String
+    public let lastExecutionBackend: String
+    public let lastExecutionBackendDetail: String
 
     public init(
         fileCount: Int,
@@ -28,7 +30,9 @@ public struct RuntimeStateSummary: Codable, Sendable, Equatable {
         lastHTTPResponseDurationMillis: Int,
         lastHTTPResponseSize: Int,
         lastOutputPreview: String,
-        lastTraceEntry: String
+        lastTraceEntry: String,
+        lastExecutionBackend: String,
+        lastExecutionBackendDetail: String
     ) {
         self.fileCount = fileCount
         self.commandCount = commandCount
@@ -43,5 +47,7 @@ public struct RuntimeStateSummary: Codable, Sendable, Equatable {
         self.lastHTTPResponseSize = lastHTTPResponseSize
         self.lastOutputPreview = lastOutputPreview
         self.lastTraceEntry = lastTraceEntry
+        self.lastExecutionBackend = lastExecutionBackend
+        self.lastExecutionBackendDetail = lastExecutionBackendDetail
     }
 }

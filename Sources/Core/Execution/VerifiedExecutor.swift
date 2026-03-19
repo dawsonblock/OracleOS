@@ -63,17 +63,29 @@ public final class VerifiedExecutor: Sendable {
 
     private func runShell(_ command: Command) throws -> [any DomainEvent] {
         let shellCommand = command.stringValue(for: "cmd") ?? ""
-        if shouldUseMicroVM {
-            return try runShellMicroVM(commandID: command.id, shellCommand: shellCommand)
-        }
-        if shouldUseContainer {
-            return try runShellContainer(commandID: command.id, shellCommand: shellCommand)
+        let selection = selectShellBackend()
+        let result: ShellExecutedEvent
+
+        switch selection.backend {
+        case .microVM:
+            result = try runShellMicroVM(commandID: command.id, shellCommand: shellCommand)
+        case .container:
+            result = try runShellContainer(commandID: command.id, shellCommand: shellCommand)
+        case .host:
+            result = try runShellHost(commandID: command.id, shellCommand: shellCommand)
         }
 
-        return try runShellHost(commandID: command.id, shellCommand: shellCommand)
+        return [
+            ExecutionBackendSelectedEvent(
+                commandID: command.id,
+                backend: selection.backend.rawValue,
+                detail: selection.detail
+            ),
+            result,
+        ]
     }
 
-    private func runShellHost(commandID: UUID, shellCommand: String) throws -> [any DomainEvent] {
+    private func runShellHost(commandID: UUID, shellCommand: String) throws -> ShellExecutedEvent {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["-c", shellCommand]
@@ -87,17 +99,15 @@ public final class VerifiedExecutor: Sendable {
 
         let output = trimmedOutput(from: pipe)
 
-        return [
-            ShellExecutedEvent(
-                commandID: commandID,
-                command: shellCommand,
-                output: output,
-                status: process.terminationStatus
-            ),
-        ]
+        return ShellExecutedEvent(
+            commandID: commandID,
+            command: shellCommand,
+            output: output,
+            status: process.terminationStatus
+        )
     }
 
-    private func runShellContainer(commandID: UUID, shellCommand: String) throws -> [any DomainEvent] {
+    private func runShellContainer(commandID: UUID, shellCommand: String) throws -> ShellExecutedEvent {
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") else {
             throw RuntimeError.serverFailure("Container runtime unavailable: /usr/bin/docker")
         }
@@ -156,17 +166,15 @@ public final class VerifiedExecutor: Sendable {
 
         let output = trimmedOutput(from: pipe)
 
-        return [
-            ShellExecutedEvent(
-                commandID: commandID,
-                command: shellCommand,
-                output: output,
-                status: process.terminationStatus
-            ),
-        ]
+        return ShellExecutedEvent(
+            commandID: commandID,
+            command: shellCommand,
+            output: output,
+            status: process.terminationStatus
+        )
     }
 
-    private func runShellMicroVM(commandID: UUID, shellCommand: String) throws -> [any DomainEvent] {
+    private func runShellMicroVM(commandID: UUID, shellCommand: String) throws -> ShellExecutedEvent {
         let firecrackerBinaryPath = URL(fileURLWithPath: policy.policy.firecrackerBinaryPath).standardizedFileURL.path
         guard FileManager.default.isExecutableFile(atPath: firecrackerBinaryPath) else {
             throw RuntimeError.serverFailure("MicroVM runtime unavailable: \(firecrackerBinaryPath)")
@@ -233,14 +241,12 @@ public final class VerifiedExecutor: Sendable {
 
         let output = trimmedOutput(from: pipe)
 
-        return [
-            ShellExecutedEvent(
-                commandID: commandID,
-                command: shellCommand,
-                output: output,
-                status: process.terminationStatus
-            ),
-        ]
+        return ShellExecutedEvent(
+            commandID: commandID,
+            command: shellCommand,
+            output: output,
+            status: process.terminationStatus
+        )
     }
 
     private func writeFile(_ command: Command) throws -> [any DomainEvent] {
@@ -372,22 +378,6 @@ public final class VerifiedExecutor: Sendable {
         killProcess.waitUntilExit()
     }
 
-    private var shouldUseMicroVM: Bool {
-        guard policy.policy.useMicroVM else {
-            return false
-        }
-
-        return microVMAssetsAvailable
-    }
-
-    private var shouldUseContainer: Bool {
-        guard policy.policy.useContainers else {
-            return false
-        }
-
-        return containerRuntimeAvailable
-    }
-
     private var containerRuntimeAvailable: Bool {
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") else {
             return false
@@ -421,9 +411,103 @@ public final class VerifiedExecutor: Sendable {
 
         return true
     }
+
+    private func selectShellBackend() -> ShellBackendSelection {
+        if policy.policy.useMicroVM {
+            if microVMAssetsAvailable {
+                return ShellBackendSelection(
+                    backend: .microVM,
+                    detail: "microvm preferred and available"
+                )
+            }
+
+            if policy.policy.useContainers, containerRuntimeAvailable {
+                return ShellBackendSelection(
+                    backend: .container,
+                    detail: "microvm unavailable (\(microVMUnavailableReason)); fell back to container"
+                )
+            }
+
+            return ShellBackendSelection(
+                backend: .host,
+                detail: "microvm unavailable (\(microVMUnavailableReason)); fell back to host"
+            )
+        }
+
+        if policy.policy.useContainers {
+            if containerRuntimeAvailable {
+                return ShellBackendSelection(
+                    backend: .container,
+                    detail: "container backend selected"
+                )
+            }
+
+            return ShellBackendSelection(
+                backend: .host,
+                detail: "container unavailable (\(containerUnavailableReason)); fell back to host"
+            )
+        }
+
+        return ShellBackendSelection(
+            backend: .host,
+            detail: "host backend selected"
+        )
+    }
+
+    private var containerUnavailableReason: String {
+        if !FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") {
+            return "docker runtime missing"
+        }
+
+        if let seccompProfilePath = policy.policy.seccompProfilePath {
+            let normalizedPath = URL(fileURLWithPath: seccompProfilePath).standardizedFileURL.path
+            if !FileManager.default.fileExists(atPath: normalizedPath) {
+                return "seccomp profile missing at \(normalizedPath)"
+            }
+        }
+
+        return "container backend unavailable"
+    }
+
+    private var microVMUnavailableReason: String {
+        let firecrackerBinaryPath = URL(fileURLWithPath: policy.policy.firecrackerBinaryPath).standardizedFileURL.path
+        if !FileManager.default.isExecutableFile(atPath: firecrackerBinaryPath) {
+            return "firecracker binary missing at \(firecrackerBinaryPath)"
+        }
+
+        let kernelPath = URL(fileURLWithPath: policy.policy.microVMKernelPath).standardizedFileURL.path
+        if !FileManager.default.fileExists(atPath: kernelPath) {
+            return "kernel missing at \(kernelPath)"
+        }
+
+        let rootfsPath = URL(fileURLWithPath: policy.policy.microVMRootfsPath).standardizedFileURL.path
+        if !FileManager.default.fileExists(atPath: rootfsPath) {
+            return "rootfs missing at \(rootfsPath)"
+        }
+
+        if let workspaceImagePath = policy.policy.microVMWorkspaceImagePath {
+            let normalizedPath = URL(fileURLWithPath: workspaceImagePath).standardizedFileURL.path
+            if !FileManager.default.fileExists(atPath: normalizedPath) {
+                return "workspace image missing at \(normalizedPath)"
+            }
+        }
+
+        return "microvm backend unavailable"
+    }
 }
 
 private final class ResponseBox: @unchecked Sendable {
     var data: Data?
     var error: Error?
+}
+
+private struct ShellBackendSelection {
+    let backend: ShellBackend
+    let detail: String
+}
+
+private enum ShellBackend: String {
+    case microVM = "microvm"
+    case container
+    case host
 }

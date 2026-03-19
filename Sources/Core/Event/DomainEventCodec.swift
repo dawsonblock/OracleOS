@@ -5,6 +5,8 @@ public enum DomainEventCodec {
         let encoder = JSONEncoder()
 
         switch event {
+        case let event as ExecutionBackendSelectedEvent:
+            return try encoder.encode(event)
         case let event as ShellExecutedEvent:
             return try encoder.encode(event)
         case let event as FileWriteEvent:
@@ -22,6 +24,8 @@ public enum DomainEventCodec {
         let decoder = JSONDecoder()
 
         switch type {
+        case ExecutionBackendSelectedEvent.eventType:
+            return try decoder.decode(ExecutionBackendSelectedEvent.self, from: data)
         case ShellExecutedEvent.eventType:
             return try decoder.decode(ShellExecutedEvent.self, from: data)
         case FileWriteEvent.eventType:

@@ -15,7 +15,9 @@ public enum RuntimeViewBuilder {
             lastHTTPResponseDurationMillis: state.lastHTTPResponseDurationMillis,
             lastHTTPResponseSize: state.lastHTTPResponseSize,
             lastOutputPreview: preview(state.lastOutput),
-            lastTraceEntry: state.executionTrace.last ?? ""
+            lastTraceEntry: state.executionTrace.last ?? "",
+            lastExecutionBackend: state.lastExecutionBackend,
+            lastExecutionBackendDetail: state.lastExecutionBackendDetail
         )
     }
 
@@ -23,6 +25,20 @@ public enum RuntimeViewBuilder {
         let event = try DomainEventCodec.decode(type: envelope.type, data: envelope.event)
 
         switch event {
+        case let event as ExecutionBackendSelectedEvent:
+            return RuntimeEventSummary(
+                id: envelope.id,
+                commandID: envelope.commandID,
+                timestamp: envelope.timestamp,
+                type: envelope.type,
+                success: true,
+                timedOut: false,
+                summary: "backend \(event.backend): \(preview(event.detail, limit: 80))",
+                details: [
+                    "backend": event.backend,
+                    "detail": event.detail,
+                ]
+            )
         case let event as ShellExecutedEvent:
             return RuntimeEventSummary(
                 id: envelope.id,

@@ -12,6 +12,10 @@ public struct DefaultReducer: Reducer {
 
         for event in events {
             switch event {
+            case let event as ExecutionBackendSelectedEvent:
+                newState.lastExecutionBackend = event.backend
+                newState.lastExecutionBackendDetail = event.detail
+                newState.executionTrace.append(event.type)
             case let event as FileWriteEvent:
                 newState.files[event.path] = event.content
                 newState.executionTrace.append(event.type)

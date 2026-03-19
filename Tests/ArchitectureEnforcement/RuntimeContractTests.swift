@@ -76,6 +76,32 @@ final class RuntimeContractTests: XCTestCase {
         }
     }
 
+    func test_executor_emits_backend_selection_event_for_microvm_fallback() throws {
+        let policy = ExecutionPolicy(
+            allowedShellCommands: ["echo"],
+            allowedWriteRoots: [workspaceRoot()],
+            networkWhitelist: [],
+            maxExecutionTime: 0.5,
+            maxOutputBytes: 1_024,
+            useContainers: false,
+            useMicroVM: true,
+            firecrackerBinaryPath: "/tmp/missing-firecracker"
+        )
+        let executor = VerifiedExecutor(policy: PolicyEngine(policy: policy))
+        let command = Command(type: "shell", payload: ["cmd": "echo ok"])
+
+        let events = try executor.execute(command)
+
+        XCTAssertEqual(events.count, 2)
+        let backendEvent = try XCTUnwrap(events[0] as? ExecutionBackendSelectedEvent)
+        XCTAssertEqual(backendEvent.backend, "host")
+        XCTAssertTrue(backendEvent.detail.contains("microvm unavailable"))
+        XCTAssertTrue(backendEvent.detail.contains("fell back to host"))
+
+        let shellEvent = try XCTUnwrap(events[1] as? ShellExecutedEvent)
+        XCTAssertEqual(shellEvent.output.trimmingCharacters(in: .whitespacesAndNewlines), "ok")
+    }
+
     func test_microvm_runner_builds_firecracker_config_with_encoded_command() throws {
         let runner = MicroVMRunner(
             configuration: MicroVMConfiguration(

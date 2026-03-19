@@ -1,5 +1,28 @@
 import Foundation
 
+public struct ExecutionBackendSelectedEvent: DomainEvent, Equatable {
+    public static let eventType = "execution.backend.selected"
+
+    public let id: UUID
+    public let commandID: UUID
+    public let backend: String
+    public let detail: String
+
+    public var type: String { Self.eventType }
+
+    public init(
+        id: UUID = UUID(),
+        commandID: UUID,
+        backend: String,
+        detail: String
+    ) {
+        self.id = id
+        self.commandID = commandID
+        self.backend = backend
+        self.detail = detail
+    }
+}
+
 public struct ShellExecutedEvent: DomainEvent, Equatable {
     public static let eventType = "shell.executed"
 
