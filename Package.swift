@@ -1,88 +1,38 @@
-// swift-tools-version: 5.9
+// swift-tools-version:5.9
 
 import PackageDescription
 
-let concurrencySettings: [SwiftSetting] = [
-    .enableExperimentalFeature("StrictConcurrency"),
-    .enableUpcomingFeature("ExistentialAny")
-]
-
 let package = Package(
-    name: "OracleOS",
-    platforms: [
-        .macOS(.v14),
-    ],
+    name: "oracle-runtime",
+    platforms: [.macOS(.v13)],
     products: [
-        .library(name: "OracleOS", targets: ["OracleOS"]),
-        .library(name: "OracleControllerShared", targets: ["OracleControllerShared"]),
-        .executable(name: "oracle", targets: ["oracle"]),
-        .executable(name: "OracleControllerHost", targets: ["OracleControllerHost"]),
-        .executable(name: "OracleController", targets: ["OracleController"]),
-    ],
-    dependencies: [
-        // Use v0.1.0 of AXorcist, which includes the formatDebugLogMessage fix
-        // and Swift 6 portability improvements.
-        .package(url: "https://github.com/steipete/AXorcist.git", exact: "0.1.0"),
+        .executable(name: "oracle-runtime", targets: ["App"]),
+        .library(name: "Core", targets: ["Core"]),
     ],
     targets: [
         .target(
-            name: "OracleOS",
-            dependencies: [
-                .product(name: "AXorcist", package: "AXorcist"),
-            ],
-            path: "Sources/OracleOS",
-            swiftSettings: concurrencySettings,
-            linkerSettings: [
-                .linkedFramework("ScreenCaptureKit"),
-                .linkedLibrary("sqlite3"),
-            ]
+            name: "Core",
+            path: "Sources/Core"
         ),
         .target(
-            name: "OracleControllerShared",
-            path: "Sources/OracleControllerShared",
-            swiftSettings: concurrencySettings
+            name: "Interface",
+            dependencies: ["Core"],
+            path: "Sources/Interface"
+        ),
+        .target(
+            name: "MultiAgent",
+            dependencies: ["Core"],
+            path: "Sources/MultiAgent"
         ),
         .executableTarget(
-            name: "oracle",
-            dependencies: ["OracleOS"],
-            path: "Sources/oracle",
-            swiftSettings: concurrencySettings
-        ),
-        .executableTarget(
-            name: "OracleControllerHost",
-            dependencies: ["OracleOS", "OracleControllerShared"],
-            path: "Sources/OracleControllerHost",
-            swiftSettings: concurrencySettings,
-            linkerSettings: [.linkedFramework("AppKit")]
-        ),
-        .executableTarget(
-            name: "OracleController",
-            dependencies: ["OracleControllerShared", "OracleOS"],
-            path: "Sources/OracleController",
-            swiftSettings: concurrencySettings,
-            linkerSettings: [
-                .linkedFramework("AppKit"),
-                .linkedFramework("SwiftUI"),
-            ]
+            name: "App",
+            dependencies: ["Core", "Interface", "MultiAgent"],
+            path: "Sources/App"
         ),
         .testTarget(
-            name: "OracleOSTests",
-            dependencies: ["OracleOS"],
-            path: "Tests/OracleOSTests",
-            swiftSettings: concurrencySettings
-        ),
-        .testTarget(
-            name: "OracleOSEvals",
-            dependencies: ["OracleOS"],
-            path: "Tests/OracleOSEvals",
-            exclude: ["README.md"],
-            swiftSettings: concurrencySettings
-        ),
-        .testTarget(
-            name: "OracleControllerTests",
-            dependencies: ["OracleControllerShared", "OracleOS"],
-            path: "Tests/OracleControllerTests",
-            swiftSettings: concurrencySettings
+            name: "ArchitectureEnforcement",
+            dependencies: ["Core"],
+            path: "Tests/ArchitectureEnforcement"
         ),
     ]
 )

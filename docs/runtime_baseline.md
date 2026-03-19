@@ -1,58 +1,49 @@
 # Runtime Baseline
 
-Captured during the `runtime-collapse` stabilisation pass.
+Captured during the deterministic runtime extraction.
 
 ## Environment
 
 | Property | Value |
 |----------|-------|
-| Swift tools version | 5.9 |
-| Minimum platform | macOS 14 |
-| Package name | OracleOS |
-| External dependencies | AXorcist 0.1.0 |
-
-## Targets
-
-| Target | Kind | Path |
-|--------|------|------|
-| `OracleOS` | library | `Sources/OracleOS` |
-| `OracleControllerShared` | library | `Sources/OracleControllerShared` |
-| `oracle` | executable | `Sources/oracle` |
-| `OracleControllerHost` | executable | `Sources/OracleControllerHost` |
-| `OracleController` | executable | `Sources/OracleController` |
-| `OracleOSTests` | test | `Tests/OracleOSTests` |
-| `OracleOSEvals` | test | `Tests/OracleOSEvals` |
-| `OracleControllerTests` | test | `Tests/OracleControllerTests` |
+| Swift command | `swift` not available on this cloud agent PATH |
+| Package manifest | `Package.swift` |
+| Package name | `oracle-runtime` |
+| Runtime targets | `Core`, `Interface`, `MultiAgent`, `App` |
+| Enforcement test target | `ArchitectureEnforcement` |
 
 ## Build Status
 
-macOS-only project (requires ScreenCaptureKit, AppKit, AXorcist).
-Build must be run on a macOS host with Xcode toolchain:
+Baseline commands requested by the plan were attempted:
 
 ```bash
+swift --version
 swift build
+swift test
 ```
 
-## Test Coverage Areas
+Observed result on this agent:
 
-Tests are organised under `Tests/OracleOSTests/`:
+- `swift --version` failed with `swift: command not found`
+- `swift build` could not be executed for the same reason
+- `swift test` could not be executed for the same reason
 
-- **Governance** — architectural rule enforcement (R1–R12)
-- **Core** — execution kernel, world model, agent loop wiring
-- **Planning** — planner selection, task graph navigation
-- **Runtime** — runtime lifecycle, coordinator boundaries
-- **Critic** — self-evaluation loop correctness
-- **Recovery** — failure classification, strategy selection
-- **StateAbstraction** — compressed UI state generation
-- **BrowserAutomation** — browser bridge behaviour
-- **CodeIntelligence** — program knowledge graph queries
-- **Memory** — state memory index operations
-- **TraceReplay** — deterministic replay validation
+The manifest and source layout were still hardened so the package is ready to validate once a Swift toolchain is present.
 
-## Cleanup Actions Taken
+## Test Counts
 
-- Deleted `.build-corrupted/` (stale Swift build artifacts committed to repo)
-- Added `.build-corrupted/` to `.gitignore`
-- Populated empty scripts (`bootstrap.sh`, `lint_all.sh`, `run_local_cluster.sh`)
-- Populated empty docs (`runtime_spine.md`, `event_model.md`, `operations.md`, `cluster.md`)
-- Removed root-level `fix_*.py` and `fix_*.sh` patch scripts (contained hardcoded local paths)
+Active enforcement suite under `Tests/ArchitectureEnforcement/`:
+
+| Metric | Count |
+|--------|-------|
+| Test files | 6 |
+| Support files | 1 |
+| Test methods | 10 |
+
+## Hygiene Status
+
+- `README.md` has no merge-conflict markers
+- `.build-corrupted/` was not present
+- `.build-corrupted/` remains ignored in `.gitignore`
+- Legacy package sources and tests were quarantined under `Legacy/`
+- Active runtime code now lives only under `Sources/Core`, `Sources/Interface`, `Sources/MultiAgent`, and `Sources/App`

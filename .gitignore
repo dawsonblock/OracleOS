@@ -39,3 +39,7 @@ ghost-os-*.tar.gz
 local/
 .oracle-graph/
 dist/
+Observability/runtime/
+repair.log
+runtime-goal.log
+runtime-followup.log
