@@ -63,10 +63,10 @@ public final class VerifiedExecutor: Sendable {
 
     private func runShell(_ command: Command) throws -> [any DomainEvent] {
         let shellCommand = command.stringValue(for: "cmd") ?? ""
-        if policy.policy.useMicroVM {
+        if shouldUseMicroVM {
             return try runShellMicroVM(commandID: command.id, shellCommand: shellCommand)
         }
-        if policy.policy.useContainers {
+        if shouldUseContainer {
             return try runShellContainer(commandID: command.id, shellCommand: shellCommand)
         }
 
@@ -370,6 +370,56 @@ public final class VerifiedExecutor: Sendable {
         killProcess.standardError = Pipe()
         try? killProcess.run()
         killProcess.waitUntilExit()
+    }
+
+    private var shouldUseMicroVM: Bool {
+        guard policy.policy.useMicroVM else {
+            return false
+        }
+
+        return microVMAssetsAvailable
+    }
+
+    private var shouldUseContainer: Bool {
+        guard policy.policy.useContainers else {
+            return false
+        }
+
+        return containerRuntimeAvailable
+    }
+
+    private var containerRuntimeAvailable: Bool {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") else {
+            return false
+        }
+
+        if let seccompProfilePath = policy.policy.seccompProfilePath {
+            let normalizedPath = URL(fileURLWithPath: seccompProfilePath).standardizedFileURL.path
+            return FileManager.default.fileExists(atPath: normalizedPath)
+        }
+
+        return true
+    }
+
+    private var microVMAssetsAvailable: Bool {
+        let firecrackerBinaryPath = URL(fileURLWithPath: policy.policy.firecrackerBinaryPath).standardizedFileURL.path
+        guard FileManager.default.isExecutableFile(atPath: firecrackerBinaryPath) else {
+            return false
+        }
+
+        let kernelPath = URL(fileURLWithPath: policy.policy.microVMKernelPath).standardizedFileURL.path
+        let rootfsPath = URL(fileURLWithPath: policy.policy.microVMRootfsPath).standardizedFileURL.path
+        guard FileManager.default.fileExists(atPath: kernelPath),
+              FileManager.default.fileExists(atPath: rootfsPath) else {
+            return false
+        }
+
+        if let workspaceImagePath = policy.policy.microVMWorkspaceImagePath {
+            let normalizedPath = URL(fileURLWithPath: workspaceImagePath).standardizedFileURL.path
+            return FileManager.default.fileExists(atPath: normalizedPath)
+        }
+
+        return true
     }
 }
 

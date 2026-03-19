@@ -29,7 +29,7 @@ enum Bootstrap {
             useContainers: true,
             containerImage: "oracle-executor",
             seccompProfilePath: seccompProfile,
-            useMicroVM: false,
+            useMicroVM: true,
             firecrackerBinaryPath: "/usr/local/bin/firecracker",
             microVMKernelPath: microVMKernel,
             microVMRootfsPath: microVMRootfs,
