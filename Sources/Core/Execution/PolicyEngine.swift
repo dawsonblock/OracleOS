@@ -29,7 +29,7 @@ public final class PolicyEngine: Sendable {
             let path = command.stringValue(for: "path") ?? ""
 
             guard isPathAllowed(path) else {
-                throw RuntimeError.policyViolation("Write path blocked: \(path)")
+                throw RuntimeError.policyViolation("Delete path blocked: \(path)")
             }
         case "http.request":
             let urlString = command.stringValue(for: "url") ?? ""
