@@ -63,7 +63,14 @@ public final class VerifiedExecutor: Sendable {
 
     private func runShell(_ command: Command) throws -> [any DomainEvent] {
         let shellCommand = command.stringValue(for: "cmd") ?? ""
+        if policy.policy.useContainers {
+            return try runShellContainer(commandID: command.id, shellCommand: shellCommand)
+        }
 
+        return try runShellHost(commandID: command.id, shellCommand: shellCommand)
+    }
+
+    private func runShellHost(commandID: UUID, shellCommand: String) throws -> [any DomainEvent] {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["-c", shellCommand]
@@ -73,25 +80,69 @@ public final class VerifiedExecutor: Sendable {
         process.standardError = pipe
 
         try process.run()
+        try waitForShellExit(process, cleanupOnTimeout: nil)
 
-        let deadline = Date().addingTimeInterval(policy.policy.maxExecutionTime)
-        while process.isRunning && Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.01)
-        }
-
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-            throw RuntimeError.timeout
-        }
-
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let trimmed = data.prefix(policy.policy.maxOutputBytes)
-        let output = String(data: trimmed, encoding: .utf8) ?? ""
+        let output = trimmedOutput(from: pipe)
 
         return [
             ShellExecutedEvent(
-                commandID: command.id,
+                commandID: commandID,
+                command: shellCommand,
+                output: output,
+                status: process.terminationStatus
+            ),
+        ]
+    }
+
+    private func runShellContainer(commandID: UUID, shellCommand: String) throws -> [any DomainEvent] {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/docker") else {
+            throw RuntimeError.serverFailure("Container runtime unavailable: /usr/bin/docker")
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/docker")
+
+        let cidFileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("oracle-executor-\(UUID().uuidString).cid")
+        let workspaceRoot = workspaceRootPath()
+        process.arguments = [
+            "run",
+            "--rm",
+            "--cidfile", cidFileURL.path,
+            "--network", "none",
+            "--memory", "128m",
+            "--cpus", "0.5",
+            "--pids-limit", "64",
+            "-v", "\(workspaceRoot):/workspace",
+            "--workdir", "/workspace",
+            "--read-only",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,size=16m",
+            "--cap-drop=ALL",
+            policy.policy.containerImage,
+            shellCommand,
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        try process.run()
+        defer {
+            try? FileManager.default.removeItem(at: cidFileURL)
+        }
+
+        try waitForShellExit(
+            process,
+            cleanupOnTimeout: { [cidFileURL] in
+                cleanupContainerIfNeeded(cidFileURL: cidFileURL)
+            }
+        )
+
+        let output = trimmedOutput(from: pipe)
+
+        return [
+            ShellExecutedEvent(
+                commandID: commandID,
                 command: shellCommand,
                 output: output,
                 status: process.terminationStatus
@@ -174,6 +225,58 @@ public final class VerifiedExecutor: Sendable {
 
         return URL(fileURLWithPath: trimmed, relativeTo: URL(fileURLWithPath: ".", isDirectory: true))
             .standardizedFileURL
+    }
+
+    private func waitForShellExit(
+        _ process: Process,
+        cleanupOnTimeout: (() -> Void)?
+    ) throws {
+        let deadline = Date().addingTimeInterval(policy.policy.maxExecutionTime)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+            cleanupOnTimeout?()
+            throw RuntimeError.timeout
+        }
+
+        process.waitUntilExit()
+    }
+
+    private func trimmedOutput(from pipe: Pipe) -> String {
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let trimmed = data.prefix(policy.policy.maxOutputBytes)
+        return String(data: trimmed, encoding: .utf8) ?? ""
+    }
+
+    private func workspaceRootPath() -> String {
+        if let root = policy.policy.allowedWriteRoots.first {
+            return URL(fileURLWithPath: root, isDirectory: true).standardizedFileURL.path
+        }
+
+        return URL(fileURLWithPath: "workspace", relativeTo: URL(fileURLWithPath: ".", isDirectory: true))
+            .standardizedFileURL
+            .path
+    }
+
+    private func cleanupContainerIfNeeded(cidFileURL: URL) {
+        let containerID = (try? String(contentsOf: cidFileURL, encoding: .utf8))
+            ?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let containerID, !containerID.isEmpty else {
+            return
+        }
+
+        let killProcess = Process()
+        killProcess.executableURL = URL(fileURLWithPath: "/usr/bin/docker")
+        killProcess.arguments = ["kill", containerID]
+        killProcess.standardOutput = Pipe()
+        killProcess.standardError = Pipe()
+        try? killProcess.run()
+        killProcess.waitUntilExit()
     }
 }
 

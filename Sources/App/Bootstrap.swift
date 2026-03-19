@@ -12,7 +12,9 @@ enum Bootstrap {
             allowedWriteRoots: [workspaceRoot],
             networkWhitelist: ["example.com"],
             maxExecutionTime: 3,
-            maxOutputBytes: 20_000
+            maxOutputBytes: 20_000,
+            useContainers: true,
+            containerImage: "oracle-executor"
         )
         let store = FileEventStore(path: "events.log")
         let loop = AgentLoop(
