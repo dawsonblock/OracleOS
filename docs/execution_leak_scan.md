@@ -10,6 +10,8 @@ These are the current authoritative locations for execution or execution-path se
   - subprocess launch
   - synchronous HTTP requests
   - WebSocket request/response handling
+- `Sources/OracleOS/Core/Execution/RuntimeFilesystem.swift`
+  - centralized file append/save/delete helpers
 - `Sources/OracleOS/Common/OracleProductPaths.swift`
   - centralized executable/path candidate lists
   - sidecar/model/install discovery paths
@@ -33,14 +35,19 @@ These areas no longer instantiate `Process()` or `URLSession` directly, but stil
 
 ### File-backed persistence and tooling stores
 
+The following persistence paths now route through `RuntimeFilesystem`, but the
+callers still represent transitional file-backed state rather than pure reducer
+reconstruction:
+
 - `Sources/OracleOS/Core/Event/FileEventStore.swift`
+- `Sources/OracleOS/Core/EventSourcing/DurableEventStore.swift`
 - `Sources/OracleOS/Core/Trace/TraceStore.swift`
 - `Sources/OracleOS/Core/Trace/FailureArtifactWriter.swift`
 - `Sources/OracleOS/Core/Policy/ApprovalStore.swift`
+- `Sources/OracleOS/Experiments/ExperimentManager.swift`
+- `Sources/OracleOS/Recipes/RecipeStore.swift`
 - `Sources/OracleOS/Diagnostics/**`
 - `Sources/OracleOS/ProjectMemory/**`
-- `Sources/OracleOS/Recipes/RecipeStore.swift`
-- `Sources/OracleOS/Experiments/ExperimentManager.swift`
 - `Sources/OracleOS/Experiments/WorktreeSandbox.swift`
 - `Sources/OracleController/ProductEnvironmentManager.swift`
 
@@ -58,6 +65,7 @@ These shortcuts were removed from the active runtime boundary in this extraction
 - shell and subprocess path literals were collapsed into shared providers
 - `WorkspaceRunner`, repository git inspection, worktree helpers, host process launch, and vision startup now delegate through `VerifiedExecutor`
 - direct `Process(` and `URLSession` creation in active runtime code was reduced to the verified boundary file
+- core event, trace, approval, recipe, experiment, and project-memory stores were moved onto `RuntimeFilesystem`
 
 ## Remaining work
 

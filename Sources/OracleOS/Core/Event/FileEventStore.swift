@@ -12,34 +12,30 @@ public final class FileEventStore: EventStore, @unchecked Sendable {
     public func append(_ events: [any DomainEvent]) throws {
         guard !events.isEmpty else { return }
 
-        let fileManager = FileManager.default
         let directory = url.deletingLastPathComponent()
-        if !fileManager.fileExists(atPath: directory.path) {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        if !RuntimeFilesystem.fileExists(atPath: directory.path) {
+            try RuntimeFilesystem.ensureDirectory(at: directory)
         }
-        if !fileManager.fileExists(atPath: url.path) {
-            try Data().write(to: url)
+        if !RuntimeFilesystem.fileExists(atPath: url.path) {
+            try RuntimeFilesystem.saveData(Data(), to: url)
         }
-
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
 
         for event in events {
             let encodedEvent = try DomainEventCodec.encode(event)
             let envelope = EventEnvelope(event: encodedEvent, type: event.type)
             let data = try encoder.encode(envelope)
-            try handle.write(contentsOf: data)
-            try handle.write(contentsOf: Data("\n".utf8))
+            var line = data
+            line.append(0x0A)
+            try RuntimeFilesystem.append(line, to: url)
         }
     }
 
     public func load() throws -> [EventEnvelope] {
-        guard FileManager.default.fileExists(atPath: url.path) else {
+        guard RuntimeFilesystem.fileExists(atPath: url.path) else {
             return []
         }
 
-        let data = try Data(contentsOf: url)
+        let data = try RuntimeFilesystem.loadData(at: url)
         guard let text = String(data: data, encoding: .utf8), !text.isEmpty else {
             return []
         }
