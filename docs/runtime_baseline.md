@@ -36,9 +36,9 @@ Active enforcement + contract suite under `Tests/ArchitectureEnforcement/`:
 
 | Metric | Count |
 |--------|-------|
-| Test files | 9 |
+| Test files | 10 |
 | Support files | 1 |
-| Test methods | 17 |
+| Test methods | 27 |
 
 ## Hygiene Status
 

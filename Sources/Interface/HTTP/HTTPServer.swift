@@ -13,11 +13,13 @@ private let streamSocketType = SOCK_STREAM
 
 public final class HTTPServer {
     private let runtime: AgentRuntime
+    private let router: HTTPRouter
     private let queue = DispatchQueue(label: "oracle.runtime.http")
     private var serverSocket: Int32 = -1
 
-    public init(runtime: AgentRuntime) {
+    public init(runtime: AgentRuntime, router: HTTPRouter = HTTPRouter()) {
         self.runtime = runtime
+        self.router = router
     }
 
     public func start(port: UInt16 = 8080) throws {
@@ -103,7 +105,10 @@ public final class HTTPServer {
         defer { runtimeClose(clientSocket) }
 
         guard let requestText = readRequest(from: clientSocket) else {
-            writeResponse(makeResponse(status: 400, body: Data("bad request\n".utf8), contentType: "text/plain"), to: clientSocket)
+            writeResponse(
+                makeResponse(HTTPResponse(status: 400, contentType: "text/plain", body: Data("bad request\n".utf8))),
+                to: clientSocket
+            )
             return
         }
 
@@ -113,54 +118,9 @@ public final class HTTPServer {
 
     private func route(_ requestText: String) -> Data {
         guard let request = HTTPRequestParser.parse(requestText) else {
-            return makeResponse(status: 400, body: Data("bad request\n".utf8), contentType: "text/plain")
+            return makeResponse(HTTPResponse(status: 400, contentType: "text/plain", body: Data("bad request\n".utf8)))
         }
-
-        switch (request.method, request.path) {
-        case ("POST", "/goal"):
-            do {
-                let goalText = request.body.trimmingCharacters(in: .whitespacesAndNewlines)
-                let state = try runtime.run(goal: Goal(text: goalText))
-                let payload = GoalRunResponse(
-                    status: "ok",
-                    goal: goalText,
-                    commandCount: state.executedCommandIDs.count,
-                    traceCount: state.executionTrace.count,
-                    state: state
-                )
-                let data = try makeJSONBody(payload)
-                return makeResponse(status: 200, body: data, contentType: "application/json")
-            } catch {
-                let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-                return makeResponse(status: 500, body: Data(message.utf8), contentType: "text/plain")
-            }
-        case ("GET", "/events"):
-            do {
-                let limit = request.queryItems["limit"].flatMap(Int.init) ?? 100
-                let safeLimit = max(1, min(limit, 1000))
-                let data = try makeJSONBody(runtime.recentEvents(limit: safeLimit))
-                return makeResponse(status: 200, body: data, contentType: "application/json")
-            } catch {
-                let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-                return makeResponse(status: 500, body: Data(message.utf8), contentType: "text/plain")
-            }
-        case ("GET", "/state"):
-            do {
-                let data = try makeJSONBody(runtime.currentState())
-                return makeResponse(status: 200, body: data, contentType: "application/json")
-            } catch {
-                let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
-                return makeResponse(status: 500, body: Data(message.utf8), contentType: "text/plain")
-            }
-        default:
-            return makeResponse(status: 404, body: Data("not found\n".utf8), contentType: "text/plain")
-        }
-    }
-
-    private func makeJSONBody<T: Encodable>(_ value: T) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(value)
+        return makeResponse(router.handle(request, runtime: runtime))
     }
 
     private func readRequest(from clientSocket: Int32) -> String? {
@@ -182,34 +142,14 @@ public final class HTTPServer {
         }
     }
 
-    private func makeResponse(status: Int, body: Data, contentType: String) -> Data {
-        let statusText: String
-        switch status {
-        case 200:
-            statusText = "OK"
-        case 400:
-            statusText = "Bad Request"
-        case 404:
-            statusText = "Not Found"
-        default:
-            statusText = "Internal Server Error"
-        }
-
-        var header = "HTTP/1.1 \(status) \(statusText)\r\n"
-        header += "Content-Type: \(contentType)\r\n"
-        header += "Content-Length: \(body.count)\r\n"
+    private func makeResponse(_ response: HTTPResponse) -> Data {
+        var header = "HTTP/1.1 \(response.status) \(response.statusText)\r\n"
+        header += "Content-Type: \(response.contentType)\r\n"
+        header += "Content-Length: \(response.body.count)\r\n"
         header += "Connection: close\r\n\r\n"
 
-        var response = Data(header.utf8)
-        response.append(body)
-        return response
+        var data = Data(header.utf8)
+        data.append(response.body)
+        return data
     }
-}
-
-private struct GoalRunResponse: Encodable {
-    let status: String
-    let goal: String
-    let commandCount: Int
-    let traceCount: Int
-    let state: WorldState
 }

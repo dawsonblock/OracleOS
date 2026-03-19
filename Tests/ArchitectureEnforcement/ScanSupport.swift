@@ -63,4 +63,26 @@ enum ScanSupport {
 
         return hits.sorted()
     }
+
+    static func importedModules(in relativeDirectories: [String]) throws -> [String: [String]] {
+        let files = try swiftFiles(in: relativeDirectories)
+        var result: [String: [String]] = [:]
+
+        for fileURL in files {
+            let relativePath = fileURL.path.replacingOccurrences(of: repositoryRoot().path + "/", with: "")
+            let text = try String(contentsOf: fileURL, encoding: .utf8)
+            let modules = text
+                .split(separator: "\n")
+                .compactMap { line -> String? in
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    guard trimmed.hasPrefix("import ") else {
+                        return nil
+                    }
+                    return String(trimmed.dropFirst("import ".count))
+                }
+            result[relativePath] = modules
+        }
+
+        return result
+    }
 }
