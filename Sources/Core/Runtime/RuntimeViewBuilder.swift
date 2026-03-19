@@ -35,10 +35,9 @@ public enum RuntimeViewBuilder {
                 details: [
                     "command": event.command,
                     "status": String(event.status),
-                    "duration_ms": String(event.durationMillis),
                 ]
             )
-        case let event as FileWriteRequestedEvent:
+        case let event as FileWriteEvent:
             return RuntimeEventSummary(
                 id: envelope.id,
                 commandID: envelope.commandID,
@@ -52,7 +51,7 @@ public enum RuntimeViewBuilder {
                     "bytes": String(event.content.utf8.count),
                 ]
             )
-        case let event as FileDeleteRequestedEvent:
+        case let event as FileDeleteEvent:
             return RuntimeEventSummary(
                 id: envelope.id,
                 commandID: envelope.commandID,
@@ -69,28 +68,12 @@ public enum RuntimeViewBuilder {
                 commandID: envelope.commandID,
                 timestamp: envelope.timestamp,
                 type: envelope.type,
-                success: (200..<500).contains(event.status),
+                success: !event.body.isEmpty,
                 timedOut: false,
-                summary: "http \(event.status): \(preview(event.url, limit: 80))",
+                summary: "http response: \(preview(event.url, limit: 80))",
                 details: [
                     "url": event.url,
-                    "status": String(event.status),
-                    "size": String(event.size),
-                    "duration_ms": String(event.durationMillis),
-                ]
-            )
-        case let event as CommandFailedEvent:
-            return RuntimeEventSummary(
-                id: envelope.id,
-                commandID: envelope.commandID,
-                timestamp: envelope.timestamp,
-                type: envelope.type,
-                success: false,
-                timedOut: event.timedOut,
-                summary: event.reason,
-                details: [
-                    "command_type": event.commandType,
-                    "timed_out": String(event.timedOut),
+                    "bytes": String(event.body.utf8.count),
                 ]
             )
         default:

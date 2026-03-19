@@ -22,18 +22,9 @@ public struct BasicCritic: Critic {
     public func evaluate(goal: Goal, events: [any DomainEvent], state: WorldState) -> Evaluation {
         let goalText = goal.text.lowercased()
         let shellEvents = events.compactMap { $0 as? ShellExecutedEvent }
-        let writeEvents = events.compactMap { $0 as? FileWriteRequestedEvent }
-        let deleteEvents = events.compactMap { $0 as? FileDeleteRequestedEvent }
+        let writeEvents = events.compactMap { $0 as? FileWriteEvent }
+        let deleteEvents = events.compactMap { $0 as? FileDeleteEvent }
         let httpEvents = events.compactMap { $0 as? HTTPResponseEvent }
-        let failureEvents = events.compactMap { $0 as? CommandFailedEvent }
-
-        if let failure = failureEvents.last, shellEvents.isEmpty, httpEvents.isEmpty, state.files.isEmpty {
-            return Evaluation(
-                success: false,
-                score: 0.0,
-                issues: [failure.reason]
-            )
-        }
 
         if goalText.hasPrefix("write file ") {
             let target = writeTarget(from: goal.text)
@@ -43,7 +34,7 @@ public struct BasicCritic: Critic {
             return Evaluation(
                 success: success,
                 score: success ? 1.0 : 0.0,
-                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file write did not complete for \(target.path)." : state.lastFailure]
+                issues: success ? [] : ["Expected file write did not complete for \(target.path)."]
             )
         }
 
@@ -53,7 +44,7 @@ public struct BasicCritic: Critic {
             return Evaluation(
                 success: success,
                 score: success ? 1.0 : 0.0,
-                issues: success ? [] : [state.lastFailure.isEmpty ? "Expected file delete did not complete for \(path)." : state.lastFailure]
+                issues: success ? [] : ["Expected file delete did not complete for \(path)."]
             )
         }
 
@@ -62,16 +53,16 @@ public struct BasicCritic: Critic {
             return Evaluation(
                 success: success,
                 score: success ? 0.9 : 0.1,
-                issues: success ? [] : [failureEvents.last?.reason ?? "Shell goal did not complete successfully."]
+                issues: success ? [] : ["Shell goal did not complete successfully."]
             )
         }
 
         if goalText.hasPrefix("http ") {
-            let success = httpEvents.contains(where: { (200..<500).contains($0.status) })
+            let success = httpEvents.contains(where: { !$0.body.isEmpty })
             return Evaluation(
                 success: success,
                 score: success ? 0.9 : 0.1,
-                issues: success ? [] : [failureEvents.last?.reason ?? "HTTP goal did not produce a valid response event."]
+                issues: success ? [] : ["HTTP goal did not produce a valid response event."]
             )
         }
 
@@ -86,13 +77,13 @@ public struct BasicCritic: Critic {
     private func goalPath(from text: String, prefix: String) -> String {
         let remainder = String(text.dropFirst(prefix.count))
         let parts = remainder.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-        return parts.first.map(String.init) ?? "runtime-output.txt"
+        return parts.first.map(String.init) ?? "workspace/runtime-output.txt"
     }
 
     private func writeTarget(from text: String) -> (path: String, content: String) {
         let remainder = String(text.dropFirst("write file ".count))
         let parts = remainder.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-        let path = parts.first.map(String.init) ?? "runtime-output.txt"
+        let path = parts.first.map(String.init) ?? "workspace/runtime-output.txt"
         let content = parts.count > 1 ? String(parts[1]) : text
         return (path: path, content: content)
     }

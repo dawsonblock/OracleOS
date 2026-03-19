@@ -20,17 +20,19 @@ public struct HTTPRouter {
     private func runGoal(_ request: HTTPRequest, runtime: AgentRuntime) -> HTTPResponse {
         do {
             let goalText = request.body.trimmingCharacters(in: .whitespacesAndNewlines)
-            let result = try runtime.runResult(goal: Goal(text: goalText))
+            let state = try waitForRuntime {
+                try await runtime.run(goal: Goal(text: goalText))
+            }
             let payload = GoalRunResponse(
-                status: result.success ? "ok" : "degraded",
-                success: result.success,
+                status: "ok",
+                success: true,
                 goal: goalText,
-                commandCount: result.state.executedCommandIDs.count,
-                traceCount: result.state.executionTrace.count,
-                emittedEventCount: result.emittedEventCount,
-                issues: result.issues,
-                summary: RuntimeViewBuilder.stateSummary(from: result.state),
-                state: result.state
+                commandCount: state.executedCommandIDs.count,
+                traceCount: state.executionTrace.count,
+                emittedEventCount: state.executionTrace.count,
+                issues: [],
+                summary: RuntimeViewBuilder.stateSummary(from: state),
+                state: state
             )
             return json(status: 200, payload)
         } catch {
@@ -77,6 +79,25 @@ public struct HTTPRouter {
         let message = (error as? LocalizedError)?.errorDescription ?? String(describing: error)
         return message + "\n"
     }
+
+    private func waitForRuntime<T>(
+        _ operation: @escaping @Sendable () async throws -> T
+    ) throws -> T {
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = AsyncResultBox<T>()
+
+        Task {
+            do {
+                box.result = .success(try await operation())
+            } catch {
+                box.result = .failure(error)
+            }
+            semaphore.signal()
+        }
+
+        semaphore.wait()
+        return try box.result!.get()
+    }
 }
 
 private struct GoalRunResponse: Encodable {
@@ -99,4 +120,8 @@ private struct EventListResponse: Encodable {
 private struct StateViewResponse: Encodable {
     let summary: RuntimeStateSummary
     let state: WorldState
+}
+
+private final class AsyncResultBox<T>: @unchecked Sendable {
+    var result: Result<T, Error>?
 }

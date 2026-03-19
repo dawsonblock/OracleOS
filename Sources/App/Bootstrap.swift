@@ -2,17 +2,23 @@ import Core
 import Foundation
 
 enum Bootstrap {
-    static func makeRuntime(
-        eventLogPath: String = URL(
-            fileURLWithPath: "Observability/runtime/events.jsonl",
+    static func makeRuntime() -> AgentRuntime {
+        let workspaceRoot = URL(
+            fileURLWithPath: "workspace",
             relativeTo: URL(fileURLWithPath: ".")
         ).standardizedFileURL.path
-    ) -> AgentRuntime {
-        let store = FileEventStore(path: eventLogPath)
+        let policy = ExecutionPolicy(
+            allowedShellCommands: ["ls", "echo", "cat"],
+            allowedWriteRoots: [workspaceRoot],
+            networkWhitelist: ["example.com"],
+            maxExecutionTime: 3,
+            maxOutputBytes: 20_000
+        )
+        let store = FileEventStore(path: "events.log")
         let loop = AgentLoop(
             planner: BasicPlanner(),
             resolver: CommandResolver(),
-            executor: VerifiedExecutor(policy: PolicyEngine()),
+            executor: VerifiedExecutor(policy: PolicyEngine(policy: policy)),
             store: store,
             reducer: DefaultReducer(),
             critic: BasicCritic(),

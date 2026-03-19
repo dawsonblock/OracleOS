@@ -3,28 +3,10 @@ import Foundation
 import FoundationNetworking
 #endif
 
-public struct VerifiedProcessResult: Sendable, Equatable {
-    public let exitCode: Int32
-    public let stdout: String
-    public let stderr: String
-
-    public var combinedOutput: String {
-        [stdout, stderr]
-            .filter { !$0.isEmpty }
-            .joined(separator: stdout.isEmpty || stderr.isEmpty ? "" : "\n")
-    }
-
-    public init(exitCode: Int32, stdout: String, stderr: String) {
-        self.exitCode = exitCode
-        self.stdout = stdout
-        self.stderr = stderr
-    }
-}
-
 public final class VerifiedExecutor: Sendable {
     private let policy: PolicyEngine
 
-    public init(policy: PolicyEngine = PolicyEngine()) {
+    public init(policy: PolicyEngine) {
         self.policy = policy
     }
 
@@ -39,9 +21,9 @@ public final class VerifiedExecutor: Sendable {
         case "file.delete":
             return try deleteFile(command)
         case "http.request":
-            return try httpRequest(command)
+            return try performRequest(command)
         default:
-            throw RuntimeError.unknownCommand(command.type)
+            throw RuntimeError.unknownCommand
         }
     }
 
@@ -80,49 +62,52 @@ public final class VerifiedExecutor: Sendable {
     }
 
     private func runShell(_ command: Command) throws -> [any DomainEvent] {
-        let task = Process()
-        let stdout = Pipe()
-        let stderr = Pipe()
-        let shellCommand = command.payload["cmd"] ?? ""
-        let timeoutMillis = try policy.validatedTimeoutMillis(command.payload["timeout_ms"])
-        let startedAt = Date()
+        let shellCommand = command.stringValue(for: "cmd") ?? ""
 
-        task.executableURL = URL(fileURLWithPath: "/bin/bash")
-        task.arguments = ["-c", shellCommand]
-        task.standardOutput = stdout
-        task.standardError = stderr
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-c", shellCommand]
 
-        try task.run()
-        try waitForExit(task, timeoutMillis: timeoutMillis, commandType: command.type)
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
 
-        let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-        let durationMillis = max(1, Int(Date().timeIntervalSince(startedAt) * 1000.0))
+        try process.run()
+
+        let deadline = Date().addingTimeInterval(policy.policy.maxExecutionTime)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+            throw RuntimeError.timeout
+        }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let trimmed = data.prefix(policy.policy.maxOutputBytes)
+        let output = String(data: trimmed, encoding: .utf8) ?? ""
 
         return [
             ShellExecutedEvent(
                 commandID: command.id,
                 command: shellCommand,
-                output: VerifiedProcessResult(
-                    exitCode: task.terminationStatus,
-                    stdout: stdoutText,
-                    stderr: stderrText
-                ).combinedOutput,
-                status: task.terminationStatus,
-                durationMillis: durationMillis
+                output: output,
+                status: process.terminationStatus
             ),
         ]
     }
 
     private func writeFile(_ command: Command) throws -> [any DomainEvent] {
-        let path = command.payload["path"] ?? ""
-        let content = command.payload["content"] ?? ""
-        let url = try RuntimePathPolicy.validatedURL(for: path)
+        let path = command.stringValue(for: "path") ?? ""
+        let content = command.stringValue(for: "content") ?? ""
+        let url = resolveURL(for: path)
 
         try Self.writeText(content, to: url)
 
         return [
-            FileWriteRequestedEvent(
+            FileWriteEvent(
                 commandID: command.id,
                 path: path,
                 content: content
@@ -131,88 +116,68 @@ public final class VerifiedExecutor: Sendable {
     }
 
     private func deleteFile(_ command: Command) throws -> [any DomainEvent] {
-        let path = command.payload["path"] ?? ""
-        let url = try RuntimePathPolicy.validatedURL(for: path)
+        let path = command.stringValue(for: "path") ?? ""
+        let url = resolveURL(for: path)
 
         try Self.deleteItem(at: url)
 
         return [
-            FileDeleteRequestedEvent(
+            FileDeleteEvent(
                 commandID: command.id,
                 path: path
             ),
         ]
     }
 
-    private func httpRequest(_ command: Command) throws -> [any DomainEvent] {
-        let urlString = command.payload["url"] ?? ""
+    private func performRequest(_ command: Command) throws -> [any DomainEvent] {
+        let urlString = command.stringValue(for: "url") ?? ""
         guard let url = URL(string: urlString) else {
-            throw RuntimeError.invalidPayload
-        }
-        let timeoutMillis = try policy.validatedTimeoutMillis(command.payload["timeout_ms"])
-        let startedAt = Date()
-
-        var request = URLRequest(url: url)
-        request.httpMethod = command.payload["method"] ?? "GET"
-        request.timeoutInterval = TimeInterval(timeoutMillis) / 1000.0
-        if let body = command.payload["body"] {
-            request.httpBody = Data(body.utf8)
+            throw RuntimeError.invalidURL
         }
 
         let box = ResponseBox()
         let semaphore = DispatchSemaphore(value: 0)
-        let session = URLSession(configuration: .default)
-        let task = session.dataTask(with: request) { data, response, error in
+        let task = URLSession.shared.dataTask(with: url) { data, _, error in
             box.data = data
-            box.response = response as? HTTPURLResponse
             box.error = error
             semaphore.signal()
         }
 
         task.resume()
-        let waitResult = semaphore.wait(timeout: .now() + .milliseconds(timeoutMillis))
-        if waitResult == .timedOut {
+        let timeout = DispatchTime.now() + policy.policy.maxExecutionTime
+        if semaphore.wait(timeout: timeout) == .timedOut {
             task.cancel()
-            session.finishTasksAndInvalidate()
-            throw RuntimeError.executionTimedOut(command.type, timeoutMillis)
+            throw RuntimeError.timeout
         }
-        session.finishTasksAndInvalidate()
 
         if let error = box.error {
             throw error
         }
 
-        let size = box.data?.count ?? 0
-        let status = box.response?.statusCode ?? 0
-        let durationMillis = max(1, Int(Date().timeIntervalSince(startedAt) * 1000.0))
+        let trimmed = box.data?.prefix(policy.policy.maxOutputBytes) ?? Data()
+        let output = String(data: trimmed, encoding: .utf8) ?? ""
 
         return [
             HTTPResponseEvent(
                 commandID: command.id,
                 url: urlString,
-                size: size,
-                status: status,
-                durationMillis: durationMillis
+                body: output
             ),
         ]
     }
 
-    private func waitForExit(_ task: Process, timeoutMillis: Int, commandType: String) throws {
-        let deadline = Date().addingTimeInterval(TimeInterval(timeoutMillis) / 1000.0)
-        while task.isRunning {
-            if Date() >= deadline {
-                task.terminate()
-                task.waitUntilExit()
-                throw RuntimeError.executionTimedOut(commandType, timeoutMillis)
-            }
-            Thread.sleep(forTimeInterval: 0.01)
+    private func resolveURL(for path: String) -> URL {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("/") {
+            return URL(fileURLWithPath: trimmed, isDirectory: false).standardizedFileURL
         }
-        task.waitUntilExit()
+
+        return URL(fileURLWithPath: trimmed, relativeTo: URL(fileURLWithPath: ".", isDirectory: true))
+            .standardizedFileURL
     }
 }
 
 private final class ResponseBox: @unchecked Sendable {
     var data: Data?
-    var response: HTTPURLResponse?
     var error: Error?
 }

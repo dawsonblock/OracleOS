@@ -28,7 +28,7 @@ public final class MultiAgentCoordinator: Sendable {
     }
 
     @discardableResult
-    public func run(goal: Goal) throws -> WorldState {
+    public func run(goal: Goal) async throws -> WorldState {
         var state = try runtime.currentState()
         var reservedPaths = [String: Int]()
 
@@ -44,7 +44,7 @@ public final class MultiAgentCoordinator: Sendable {
                 continue
             }
 
-            state = try runtime.runResult(goal: goal, commands: commands).state
+            state = try await runtime.run(goal: goal, commands: commands)
         }
         return state
     }
@@ -66,7 +66,7 @@ public final class MultiAgentCoordinator: Sendable {
         var conflicts = Set<String>()
 
         for command in commands where command.type == "file.write" || command.type == "file.delete" {
-            let path = command.payload["path"] ?? ""
+            let path = command.stringValue(for: "path") ?? ""
             guard !path.isEmpty else {
                 continue
             }
@@ -84,7 +84,7 @@ public final class MultiAgentCoordinator: Sendable {
     }
 }
 
-public struct PlannerCommandBatch: Sendable, Equatable {
+public struct PlannerCommandBatch: Sendable {
     public let plannerIndex: Int
     public let commands: [Command]
 

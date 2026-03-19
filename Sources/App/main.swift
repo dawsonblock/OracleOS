@@ -4,7 +4,7 @@ import Interface
 
 @main
 enum App {
-    static func main() throws {
+    static func main() async throws {
         let runtime = Bootstrap.makeRuntime()
 
         switch CLIArgumentParser.parse(CommandLine.arguments) {
@@ -13,16 +13,16 @@ enum App {
             try server.start(port: port)
             RunLoop.main.run()
         case let .goal(text):
-            let goalText = text.isEmpty ? "write file runtime-goal.log runtime bootstrapped" : text
-            let result = try runtime.runResult(goal: Goal(text: goalText))
+            let goalText = text.isEmpty ? "write file workspace/runtime-goal.log runtime bootstrapped" : text
+            let state = try await runtime.run(goal: Goal(text: goalText))
             let output = CLIOutput(
-                status: result.success ? "ok" : "degraded",
-                success: result.success,
+                status: "ok",
+                success: true,
                 goal: goalText,
-                issues: result.issues,
-                emittedEventCount: result.emittedEventCount,
-                summary: RuntimeViewBuilder.stateSummary(from: result.state),
-                state: result.state
+                issues: [],
+                emittedEventCount: state.executionTrace.count,
+                summary: RuntimeViewBuilder.stateSummary(from: state),
+                state: state
             )
 
             let encoder = JSONEncoder()

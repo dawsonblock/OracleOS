@@ -42,7 +42,7 @@ final class InterfaceContractTests: XCTestCase {
             path: "/goal",
             queryItems: [:],
             headers: [:],
-            body: "write file a.txt hello"
+            body: "write file workspace/a.txt hello"
         )
 
         let response = router.handle(request, runtime: runtime)
@@ -51,14 +51,14 @@ final class InterfaceContractTests: XCTestCase {
         XCTAssertEqual(response.status, 200)
         XCTAssertEqual(response.contentType, "application/json")
         XCTAssertTrue(body?.contains("\"success\" : true") ?? false)
-        XCTAssertTrue(body?.contains("\"goal\" : \"write file a.txt hello\"") ?? false)
-        XCTAssertTrue(body?.contains("\"a.txt\"") ?? false)
+        XCTAssertTrue(body?.contains("\"goal\" : \"write file workspace/a.txt hello\"") ?? false)
+        XCTAssertTrue(body?.contains("\"workspace\\/a.txt\"") ?? false)
     }
 
-    func test_http_router_clamps_event_limit() throws {
+    func test_http_router_clamps_event_limit() async throws {
         let runtime = makeRuntime()
-        _ = try runtime.run(goal: Goal(text: "write file a.txt one"))
-        _ = try runtime.run(goal: Goal(text: "write file b.txt two"))
+        _ = try await runtime.run(goal: Goal(text: "write file workspace/a.txt one"))
+        _ = try await runtime.run(goal: Goal(text: "write file workspace/b.txt two"))
 
         let router = HTTPRouter()
         let request = HTTPRequest(
@@ -94,16 +94,13 @@ final class InterfaceContractTests: XCTestCase {
         let response = router.handle(request, runtime: runtime)
         let body = String(data: response.body, encoding: .utf8)
 
-        XCTAssertEqual(response.status, 200)
-        XCTAssertTrue(body?.contains("\"status\" : \"degraded\"") ?? false)
-        XCTAssertTrue(body?.contains("\"success\" : false") ?? false)
-        XCTAssertTrue(body?.contains("File commands must stay within the workspace root") ?? false)
-        XCTAssertTrue(body?.contains("\"failureCount\" : 1") ?? false)
+        XCTAssertEqual(response.status, 500)
+        XCTAssertTrue(body?.contains("Write path blocked: ../escape.txt") ?? false)
     }
 
-    func test_http_router_state_view_includes_summary() throws {
+    func test_http_router_state_view_includes_summary() async throws {
         let runtime = makeRuntime()
-        _ = try runtime.run(goal: Goal(text: "write file a.txt hello"))
+        _ = try await runtime.run(goal: Goal(text: "write file workspace/a.txt hello"))
 
         let router = HTTPRouter()
         let request = HTTPRequest(
@@ -122,12 +119,12 @@ final class InterfaceContractTests: XCTestCase {
         XCTAssertEqual(body.summary.fileCount, 1)
         XCTAssertEqual(body.summary.failureCount, 0)
         XCTAssertEqual(body.summary.lastHTTPResponseStatus, 0)
-        XCTAssertEqual(body.state.files["a.txt"], "hello")
+        XCTAssertEqual(body.state.files["workspace/a.txt"], "hello")
     }
 
-    func test_http_router_event_view_surfaces_failure_summary() throws {
+    func test_http_router_event_view_stays_empty_after_blocked_goal() throws {
         let runtime = makeRuntime()
-        _ = try runtime.runResult(goal: Goal(text: "write file ../escape.txt blocked"))
+        XCTAssertThrowsError(try routerRun(runtime: runtime, goal: "write file ../escape.txt blocked"))
 
         let router = HTTPRouter()
         let request = HTTPRequest(
@@ -143,15 +140,22 @@ final class InterfaceContractTests: XCTestCase {
         let body = try decoder.decode(EventListBody.self, from: response.body)
 
         XCTAssertEqual(response.status, 200)
-        XCTAssertTrue(body.events.contains(where: { !$0.success && $0.summary.contains("workspace root") }))
+        XCTAssertEqual(body.events.count, 0)
     }
 
     private func makeRuntime() -> AgentRuntime {
+        let policy = ExecutionPolicy(
+            allowedShellCommands: ["ls", "echo", "cat"],
+            allowedWriteRoots: [workspaceRoot()],
+            networkWhitelist: ["example.com"],
+            maxExecutionTime: 0.5,
+            maxOutputBytes: 4_096
+        )
         AgentRuntime(
             loop: AgentLoop(
                 planner: BasicPlanner(),
                 resolver: CommandResolver(),
-                executor: VerifiedExecutor(policy: PolicyEngine()),
+                executor: VerifiedExecutor(policy: PolicyEngine(policy: policy)),
                 store: InMemoryEventStore(),
                 reducer: DefaultReducer(),
                 critic: BasicCritic(),
@@ -169,4 +173,26 @@ private struct EventListBody: Decodable {
 private struct StateViewBody: Decodable {
     let summary: RuntimeStateSummary
     let state: WorldState
+}
+
+private func routerRun(runtime: AgentRuntime, goal: String) throws {
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: Result<WorldState, Error>?
+
+    Task {
+        do {
+            result = .success(try await runtime.run(goal: Goal(text: goal)))
+        } catch {
+            result = .failure(error)
+        }
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    _ = try result!.get()
+}
+
+private func workspaceRoot(filePath: String = #filePath) -> String {
+    let repositoryRoot = ScanSupport.repositoryRoot(filePath: filePath)
+    return repositoryRoot.appendingPathComponent("workspace", isDirectory: true).standardizedFileURL.path
 }

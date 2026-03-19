@@ -1,6 +1,6 @@
 import Foundation
 
-public final class AgentRuntime: Sendable {
+public final class AgentRuntime {
     private let loop: AgentLoop
 
     public init(loop: AgentLoop) {
@@ -8,27 +8,12 @@ public final class AgentRuntime: Sendable {
     }
 
     @discardableResult
-    public func run(goal: Goal) throws -> WorldState {
-        try loop.run(goal: goal)
+    public func run(goal: Goal) async throws -> WorldState {
+        try await loop.execute(goal: goal)
     }
+}
 
-    @discardableResult
-    public func run(goal: Goal, planner: any Planner) throws -> WorldState {
-        try loop.run(goal: goal, planner: planner)
-    }
-
-    public func runResult(goal: Goal) throws -> RuntimeRunResult {
-        try loop.runResult(goal: goal)
-    }
-
-    public func runResult(goal: Goal, planner: any Planner) throws -> RuntimeRunResult {
-        try loop.runResult(goal: goal, planner: planner)
-    }
-
-    public func runResult(goal: Goal, commands: [Command]) throws -> RuntimeRunResult {
-        try loop.runResult(goal: goal, commands: commands)
-    }
-
+public extension AgentRuntime {
     public func currentState() throws -> WorldState {
         try loop.currentState()
     }
@@ -43,5 +28,9 @@ public final class AgentRuntime: Sendable {
 
     public func recentEventSummaries(limit: Int = 100) throws -> [RuntimeEventSummary] {
         try RuntimeViewBuilder.eventSummaries(from: recentEvents(limit: limit))
+    }
+
+    internal func run(goal: Goal, commands: [Command]) async throws -> WorldState {
+        try await loop.execute(goal: goal, commands: commands)
     }
 }
