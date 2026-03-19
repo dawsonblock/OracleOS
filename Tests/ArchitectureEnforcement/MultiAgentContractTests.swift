@@ -27,7 +27,9 @@ final class MultiAgentContractTests: XCTestCase {
             ]
         )
 
-        await XCTAssertThrowsErrorAsync(try await coordinator.run(goal: Goal(text: "ignored"))) { error in
+        await XCTAssertThrowsErrorAsync({
+            try await coordinator.run(goal: Goal(text: "ignored"))
+        }) { error in
             XCTAssertEqual(
                 (error as? MultiAgentError)?.errorDescription,
                 "Conflicting file commands detected: workspace/shared.txt"
@@ -114,7 +116,7 @@ private func workspaceRoot(filePath: String = #filePath) -> String {
 }
 
 private func XCTAssertThrowsErrorAsync<T>(
-    _ expression: @autoclosure () async throws -> T,
+    _ expression: () async throws -> T,
     _ errorHandler: (Error) -> Void = { _ in }
 ) async {
     do {

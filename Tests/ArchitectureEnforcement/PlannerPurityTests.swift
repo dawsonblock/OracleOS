@@ -16,6 +16,6 @@ final class PlannerPurityTests: XCTestCase {
 
         XCTAssertEqual(commands.count, 1)
         XCTAssertEqual(commands.first?.type, "file.write")
-        XCTAssertEqual(commands.first?.payload["path"], "a.txt")
+        XCTAssertEqual(commands.first?.stringValue(for: "path"), "a.txt")
     }
 }

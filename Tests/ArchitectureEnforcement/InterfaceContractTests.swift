@@ -1,4 +1,5 @@
 import Core
+import Foundation
 import Interface
 import XCTest
 

@@ -13,7 +13,7 @@ public final class VerifiedExecutor: Sendable {
     public func execute(_ command: Command) throws -> [any DomainEvent] {
         try policy.validate(command)
 
-        switch command.type {
+        switch command.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "shell":
             return try runShell(command)
         case "file.write":
@@ -144,7 +144,7 @@ public final class VerifiedExecutor: Sendable {
         }
 
         task.resume()
-        let timeout = DispatchTime.now() + policy.policy.maxExecutionTime
+        let timeout = DispatchTime.now() + .milliseconds(Int(policy.policy.maxExecutionTime * 1000))
         if semaphore.wait(timeout: timeout) == .timedOut {
             task.cancel()
             throw RuntimeError.timeout
