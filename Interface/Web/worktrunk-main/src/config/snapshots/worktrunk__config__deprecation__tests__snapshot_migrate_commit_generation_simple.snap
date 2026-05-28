@@ -1,8 +1,0 @@
----
-source: src/config/deprecation.rs
-expression: "migration_diff(content, &result)"
----
- 
--[commit-generation]
-+[commit.generation]
- command = "llm -m haiku"

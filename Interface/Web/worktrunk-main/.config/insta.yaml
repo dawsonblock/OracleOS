@@ -1,7 +1,0 @@
-# Insta snapshot testing configuration
-# https://insta.rs/docs/settings/
-
-test:
-  # Don't force nextest — its InputHandler can cause SIGTTOU in background process groups.
-  # See tests/common/mod.rs for details. Auto-detection with fallback handles this gracefully.
-  test_runner_fallback: true

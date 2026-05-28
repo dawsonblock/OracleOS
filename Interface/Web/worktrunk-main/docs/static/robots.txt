@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://worktrunk.dev/sitemap.xml

@@ -1,7 +1,0 @@
-packages:
-  - agent
-  - agent/src/__tests__/*
-  - cli
-  - lib/*
-  - vscode
-  - web

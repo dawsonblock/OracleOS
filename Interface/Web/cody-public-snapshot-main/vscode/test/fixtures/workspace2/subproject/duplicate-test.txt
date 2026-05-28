@@ -1,1 +1,0 @@
-This file tests duplicate detection in subproject.

@@ -1,2 +1,0 @@
-# Sandbox sidecar — minimal dependencies
-# Docker is required on the host

@@ -1,9 +1,0 @@
-**/*.js
-**/*.jsx
-**/*.ts
-**/*.tsx
-**/*.svg
-node_modules/
-__mocks__/
-dist/
-vscode/e2e/utils/vscody/resources/**/*
